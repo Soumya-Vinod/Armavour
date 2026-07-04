@@ -1,2 +1,7 @@
 playwright>=1.44
 anthropic>=0.40
+SQLAlchemy>=2.0
+alembic>=1.13
+psycopg[binary]>=3.2
+python-dotenv>=1.0
+ruff>=0.8
