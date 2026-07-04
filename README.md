@@ -89,7 +89,7 @@ Start with `docs/` — the blueprint, the 8-phase execution guide with gates, th
 
 ## License
 
-MIT — see `LICENSE`. Confirm with a faculty advisor before making the repo public; recommended timing is alongside the preprint.
+MIT — see `LICENSE`.
 
 ## Citation
 
