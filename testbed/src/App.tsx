@@ -29,9 +29,9 @@ export default function App() {
       pattern: config.pattern,
       avoided: !donation.current.included,
       total,
-      expectedTotal: TICKET,
-      sneakedItem: "donation",
-      sneakedAmount: donation.current.amount,
+      expected_total: TICKET,
+      sneaked_item: "donation",
+      sneaked_amount: donation.current.amount,
     });
     setPlaced(true);
   };

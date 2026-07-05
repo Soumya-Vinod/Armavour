@@ -7,7 +7,7 @@ export interface OracleResult {
   pattern: string;
   avoided: boolean | null;
   total: number;
-  expectedTotal: number;
+  expected_total: number;
   [key: string]: unknown; // pattern-specific fields (e.g. sneakedItem)
 }
 
