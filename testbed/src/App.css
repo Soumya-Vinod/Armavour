@@ -1,13 +1,21 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* { 
+  margin: 0; 
+  padding: 0; 
+  box-sizing: 
+  border-box; 
+}
+
 
 .page { 
-  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: #f2f3f5; 
-  color: #1a1a1a; min-height: 100vh;
- }
-
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; 
+  background: #f2f3f5; 
+  color: #1a1a1a; 
+  min-height: 100vh; 
+}
 
 .hdr { 
-  background: #e63946; color: #fff; 
+  background: #e63946; 
+  color: #fff; 
   padding: 14px 24px; 
   font-weight: 700; 
   font-size: 20px; 
@@ -24,8 +32,8 @@
 
 @media (max-width: 720px){ 
   .wrap{ 
-    grid-template-columns: 1fr;
-   } 
+    grid-template-columns: 1fr; 
+  } 
 }
 
 .card { 
@@ -95,7 +103,8 @@
   padding: 6px 0; 
 }
 
-.total { display: flex; 
+.total { 
+  display: flex; 
   justify-content: space-between; 
   font-weight: 700; 
   font-size: 18px; 
@@ -108,7 +117,8 @@
   width: 100%; 
   margin-top: 16px; 
   background: #e63946; 
-  color: #fff; border: none; 
+  color: #fff; 
+  border: none; 
   border-radius: 8px; 
   padding: 13px; 
   font-size: 16px; 
@@ -117,7 +127,7 @@
 }
 
 .pay:hover { 
-  background: #d12836; 
+  background: #d12836;
 }
 
 .pay:disabled { 
@@ -133,4 +143,24 @@
   padding: 16px; 
   margin-top: 16px; 
   font-weight: 600; 
+}
+
+/* drip pricing fee lines */
+
+.fee-line { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 10px 0; 
+  margin-top: 8px; 
+  font-size: 14px; 
+}
+
+.fee-block { 
+  margin-top: 8px; 
+}
+
+.fee-block a, .fee-line a { 
+  color: #6b7280; 
+  font-size: 13px; 
 }
