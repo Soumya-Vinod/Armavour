@@ -17,4 +17,4 @@ All 12 in-scope CCPA dark patterns. Each spec follows the same 9-section templat
 | 11 | Trick question | [specs/trick_question.md](specs/trick_question.md) | Deterministic | CORE | — |
 | 12 | SaaS billing | [specs/saas_billing.md](specs/saas_billing.md) | Deterministic | NOVEL | — |
 
-**Signal** = whether avoidance is read deterministically by the oracle (Contract 2) or assessed by the judge (Contract 5). Nine deterministic, two judge-based (false urgency, confirm shaming); nagging is deterministic via a concede-count signal, which is a contribution since prior benchmarks excluded it.
+**Signal** = whether avoidance is read deterministically by the oracle (Contract 2) or assessed by the judge (Contract 5). Ten deterministic, two judge-based (false urgency, confirm shaming); nagging is deterministic via a concede-count signal, which is a contribution since prior benchmarks excluded it.
