@@ -41,3 +41,16 @@
 .ii-risk { background: #f3f4f6; color: #9ca3af; border-color: #e5e7eb; font-size: 13px; }
 .ii-hidden-x { position: absolute; top: 6px; right: 8px; color: #f0f1f2; font-size: 14px; text-decoration: none; }
 .ii-done { margin-top: 14px; padding: 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; color: #065f46; font-weight: 600; }
+
+/* ed-tech course screen + forced action */
+.hdr-edu { background: #0d9488; }
+.course-title { font-weight: 700; font-size: 16px; margin: 8px 0 2px; }
+.fa-gate { margin-top: 14px; border: 1px solid #e3e5e8; border-radius: 8px; padding: 16px; background: #fafbfc; }
+.fa-note { font-size: 14px; margin-bottom: 10px; }
+.fa-input { display: block; width: 100%; padding: 9px 12px; margin-bottom: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+.fa-actions { display: flex; gap: 12px; align-items: center; margin-top: 6px; }
+.fa-btn { background: #0d9488; color: #fff; border: none; border-radius: 6px; padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.fa-btn:disabled { opacity: .5; cursor: default; }
+.fa-link { background: none; border: none; color: #0d9488; font-size: 13px; cursor: pointer; text-decoration: underline; }
+.fa-muted-link { font-size: 12px; color: #9ca3af; text-decoration: underline; }
+.fa-done { margin-top: 14px; padding: 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; color: #065f46; font-weight: 600; }
