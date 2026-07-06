@@ -92,4 +92,4 @@ For the non-deterministic patterns (currently false urgency, confirm shaming), D
 ---
 
 ## Status
-Proposed from the Phase-1 slice. To be confirmed on the contracts call, then this line changes to "signed <date>".
+Signed 2026-07-06. All five contracts agreed as written, including the Contract 5 judge signature: judge(pattern, trace, final_screen) -> {judge_flag, judge_evidence}.

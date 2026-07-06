@@ -1,0 +1,1 @@
+2026-07-06: Contracts v1 signed as proposed. Judge signature = judge(pattern, trace, final_screen). Oracle fields snake_case. Both devs agreed.
