@@ -70,3 +70,23 @@
 .da-buy { padding: 6px 14px; font-size: 13px; }
 .ad-label { font-size: 11px; color: #9ca3af; background: #f3f4f6; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
 .ad-label-tiny { font-size: 9px; color: #d1d5db; margin-left: 4px; }
+
+/* shared screen headers */
+.hdr-sub { background: #1d4ed8; }
+.hdr-content { background: #374151; }
+
+/* subscription trap / saas billing / trick question flows */
+.st-flow, .sb-flow, .tq-flow, .cs-flow { margin-top: 14px; }
+.sb-renew, .tq-row { display: flex; gap: 8px; align-items: center; margin: 10px 0; font-size: 14px; }
+.sb-fine { color: #6b7280; font-size: 12px; }
+
+/* nagging */
+.nag-wrap { margin-top: 12px; }
+.nag-modal { margin-top: 12px; border: 1px solid #e3e5e8; border-radius: 8px; padding: 14px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.nag-tiny { background: none; border: none; color: #d1d5db; font-size: 11px; cursor: pointer; }
+
+/* false urgency cue */
+.fu-cue { color: #b91c1c; font-size: 12px; }
+
+/* confirm shaming */
+.cs-shame { margin-top: 12px; border: 1px solid #fde68a; background: #fffbeb; border-radius: 8px; padding: 12px; }
