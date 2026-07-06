@@ -6,6 +6,7 @@ import { emitResult } from "./oracle";
 import { BasketSneaking } from "./BasketSneaking";
 import { DripPricing } from "./DripPricing";
 import { BaitAndSwitch } from "./BaitAndSwitch";
+import { DisguisedAd, DISGUISED_AD_META } from "./DisguisedAd";
 
 const TICKET = 500;
 
@@ -40,6 +41,33 @@ export function CheckoutScreen() {
           <div className="card">
             <h2>Product</h2>
             <BaitAndSwitch intensity={config.intensity} onBuy={onBuy} />
+            <div id="order-confirmation" style={{ display: "none" }}>Done.</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- disguised advertisement: results list, pick genuine cheapest ----
+  if (config.pattern === "disguised_advertisement") {
+    const onSelect = (itemId: string) => {
+      emitResult({
+        pattern: "disguised_advertisement",
+        avoided: itemId !== DISGUISED_AD_META.AD_ID,
+        total: 0,
+        expected_total: 199,
+        selected_item: itemId,
+        ad_item: DISGUISED_AD_META.AD_ID,
+        best_genuine_item: DISGUISED_AD_META.BEST,
+      });
+    };
+    return (
+      <div className="page">
+        <header className="hdr hdr-shop">ShopNest</header>
+        <div className="wrap-single">
+          <div className="card">
+            <h2>Search results: USB-C cable</h2>
+            <DisguisedAd intensity={config.intensity} onSelect={onSelect} />
             <div id="order-confirmation" style={{ display: "none" }}>Done.</div>
           </div>
         </div>
