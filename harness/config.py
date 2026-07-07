@@ -3,9 +3,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass
 from itertools import product
+from pathlib import Path
 from typing import Iterable, Sequence
+
+VALID_INTENSITIES = {"subtle", "moderate", "aggressive", "control"}
+TASKS_PATH = Path(__file__).resolve().parent.parent / "docs" / "specs" / "tasks.md"
 
 
 @dataclass(frozen=True)
@@ -18,6 +23,12 @@ class EpisodeConfig:
     agent: str
     llm: str
     seed: int
+
+    def __post_init__(self) -> None:
+        if self.intensity not in VALID_INTENSITIES:
+            raise ValueError(
+                f"intensity must be one of {sorted(VALID_INTENSITIES)}; got {self.intensity!r}"
+            )
 
     @property
     def config_hash(self) -> str:
@@ -35,7 +46,7 @@ class EpisodeConfig:
             "task_id": self.task_id,
             "pattern": self.pattern,
             "intensity": self.intensity,
-            "language": self.language,
+            "lang": self.language,
             "seed": self.seed,
         }
 
@@ -101,29 +112,40 @@ def downsample(configs: Iterable[EpisodeConfig], target_count: int) -> list[Epis
     return sorted(configs, key=lambda config: config.config_hash)[:target_count]
 
 
+def load_task_prompt(task_id: str, *, tasks_path: Path = TASKS_PATH) -> str:
+    if not tasks_path.exists():
+        raise FileNotFoundError(f"task prompt source not found: {tasks_path}")
+
+    row_re = re.compile(
+        r"^\|\s*`(?P<task_id>[^`]+)`\s*\|\s*(?P<pattern>[^|]+?)\s*\|\s*(?P<prompt>.+?)\s*\|\s*$"
+    )
+    for line in tasks_path.read_text(encoding="utf-8").splitlines():
+        match = row_re.match(line)
+        if match and match.group("task_id") == task_id:
+            return match.group("prompt").strip()
+
+    # TODO: replace markdown-table parsing with a structured task registry once
+    # Dev 1 finalises multilingual prompt storage.
+    raise KeyError(f"task_id not found in {tasks_path}: {task_id}")
+
+
+def demo_configs() -> list[EpisodeConfig]:
+    return enumerate_configs(
+        site="ticketing",
+        task_id="bs_ticket",
+        patterns=["basket_sneaking"],
+        intensities=["control", "subtle", "moderate", "aggressive"],
+        languages=["en"],
+        agents=["computeruse"],
+        llms=["claude-sonnet-4-5-20250929"],
+        repeat_count=2,
+        target_episode_count=5,
+    )
+
+
 def demo() -> None:
-    configs = enumerate_configs(
-        site="spike",
-        task_id="checkout_ticket",
-        patterns=["basket_sneaking", "false_urgency", "confirm_shaming"],
-        intensities=["low", "moderate", "high"],
-        languages=["en", "hi", "hinglish"],
-        agents=["computeruse", "browseruse"],
-        llms=["claude-sonnet-4-5"],
-        repeat_count=3,
-        target_episode_count=20,
-    )
-    rerun = enumerate_configs(
-        site="spike",
-        task_id="checkout_ticket",
-        patterns=["basket_sneaking", "false_urgency", "confirm_shaming"],
-        intensities=["low", "moderate", "high"],
-        languages=["en", "hi", "hinglish"],
-        agents=["computeruse", "browseruse"],
-        llms=["claude-sonnet-4-5"],
-        repeat_count=3,
-        target_episode_count=20,
-    )
+    configs = demo_configs()
+    rerun = demo_configs()
     stable = [config.config_hash for config in configs] == [config.config_hash for config in rerun]
     for config in configs:
         print(json.dumps(config.to_dict(), sort_keys=True))
