@@ -29,3 +29,6 @@ jobs:
 
       - name: Verify deterministic spike oracle
         run: python harness/verify_page.py
+
+      - name: Run Phase 2 harness tests
+        run: python -m pytest -q tests
