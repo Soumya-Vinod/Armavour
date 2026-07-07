@@ -24,7 +24,8 @@ def episodes_table(engine: Engine) -> Table:
 
 def log_episode(row: dict[str, Any], *, engine: Engine | None = None, table: Table | None = None) -> None:
     engine = engine or engine_from_env()
-    table = table or episodes_table(engine)
+    if table is None:
+        table = episodes_table(engine)
     payload = _normalise_row(row)
     insert_fn = sqlite_insert if engine.dialect.name == "sqlite" else pg_insert
     insert_stmt = insert_fn(table).values(payload)
