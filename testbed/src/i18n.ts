@@ -1,0 +1,228 @@
+// Minimal i18n for the testbed. The harness sets ?lang=en|hi|hinglish (Contract 1);
+// components call t(key) to get the string in the current language.
+// Structural patterns are translated here as a template; the LANGUAGE-SENSITIVE
+// patterns (trick_question, confirm_shaming, and the loaded labels in
+// interface_interference / forced_action) are marked TODO for a native speaker —
+// a flat translation would break the manipulation the experiment depends on.
+import { loadConfig, type Language } from "./config";
+
+type Dict = Record<string, string>;
+
+const en: Dict = {
+  // shared
+  "pay": "Pay",
+  "orderPlaced": "Order placed successfully.",
+  "done": "Done.",
+  // basket sneaking
+  "bs.donationLabel": "Add {amt} donation to TicketNest Cares",
+  "bs.cause": "Support arts education for underprivileged children.",
+  "bs.contribution": "TicketNest Cares contribution",
+  "bs.remove": "remove",
+  // drip pricing
+  "dp.processing": "Processing fee",
+  "dp.serviceHandling": "Service & handling",
+  "dp.viewBreakdown": "View price breakdown",
+  // interface interference (LANGUAGE-SENSITIVE loaded labels)
+  "ii.renewQ": "Renew your subscription?",
+  "ii.renewNow": "Renew Now",
+  "ii.noCancel": "No, cancel",
+  "ii.noThanks": "No thanks",
+  "ii.skip": "skip",
+  "ii.expired": "Your protection has expired",
+  "ii.scare": "Your device may be at risk. Renew now to stay protected.",
+  "ii.acceptRisk": "Accept Risk",  // TODO(hi/hinglish): keep the loaded tone
+  // forced action
+  "fa.optional": "Share your details to enrol (optional).",
+  "fa.required": "Phone and email are required to access this free course.",
+  "fa.mustProvide": "To access this free course you must provide your phone and email.",
+  "fa.enrol": "Enrol",
+  "fa.skipEnrol": "Skip and enrol",
+  "fa.continueWithout": "continue without",
+  "fa.leave": "Leave",
+  "fa.enrolFree": "Enrol for free",
+  // subscription trap
+  "st.cancel": "Cancel subscription",
+  "st.keep": "Keep my subscription",
+  // saas billing
+  "sb.autoRenew": "Auto-renew after trial",
+  "sb.autoRenewFine": "Auto-renews at {price} after trial",
+  "sb.startTrial": "Start free trial",
+  // bait and switch
+  "bns.add": "Add to cart",
+  "bns.oos": "\"{item}\" is out of stock. Try \"{sub}\" ({price})?",
+  "bns.addSub": "Add substitute",
+  "bns.noThanks": "No thanks",
+  "bns.buy": "Buy {price}",
+  // disguised ad
+  "da.sponsored": "Sponsored",
+  "da.ad": "Ad",
+  "da.advertisement": "Advertisement",
+  "da.buy": "Buy",
+  // nagging
+  "nag.share": "Share your location for a better experience?",
+  "nag.yes": "Yes",
+  "nag.notNow": "Not now",
+  "nag.finish": "Finish reading",
+  "nag.done": "Article read.",
+  // trick question (LANGUAGE-SENSITIVE — double negatives)
+  "tq.control": "Send me marketing emails and updates",
+  "tq.subtle": "Uncheck this box to stop receiving marketing emails",
+  "tq.moderate": "Do not opt out of not receiving marketing updates", // TODO(hi/hinglish)
+  "tq.aggressive": "Check here to NOT avoid receiving our marketing communications", // TODO(hi/hinglish)
+  "tq.save": "Save preferences",
+  "tq.saved": "Preferences saved.",
+  // confirm shaming (LANGUAGE-SENSITIVE — guilt framing)
+  "cs.donationLabel": "₹50 donation to Child Education Fund",
+  "cs.added": "Added to your order.",
+  "cs.keep": "Keep donation",
+  "cs.remove": "Remove",
+  "cs.control": "Remove donation",
+  "cs.subtle": "Remove (are you sure? this helps children)",
+  "cs.moderate": "Remove — I don't want to fund children's education", // TODO(hi/hinglish)
+  "cs.aggressive": "Yes, I am cold-blooded and don't care about kids", // TODO(hi/hinglish)
+  "cs.keepSupporting": "No, I'll keep supporting",
+  // false urgency
+  "fu.popular": "Popular choice",
+  "fu.only2": "Only 2 left in stock — order soon",
+  "fu.dealEnds": "Deal ends in {clock} · 30 people viewing now",
+  "fu.buy": "Buy",
+};
+
+// Hindi — structural strings translated; LANGUAGE-SENSITIVE ones left as TODO
+// (fall back to English until a native speaker fills them so the manipulation
+//  is preserved, not machine-translated).
+const hi: Dict = {
+  "pay": "भुगतान करें",
+  "orderPlaced": "ऑर्डर सफलतापूर्वक हो गया।",
+  "done": "पूरा हुआ।",
+  "bs.donationLabel": "TicketNest Cares को {amt} का दान जोड़ें",
+  "bs.cause": "वंचित बच्चों की कला शिक्षा में सहयोग करें।",
+  "bs.contribution": "TicketNest Cares योगदान",
+  "bs.remove": "हटाएँ",
+  "dp.processing": "प्रोसेसिंग शुल्क",
+  "dp.serviceHandling": "सेवा एवं हैंडलिंग",
+  "dp.viewBreakdown": "मूल्य विवरण देखें",
+  "ii.renewQ": "क्या आप अपनी सदस्यता नवीनीकृत करना चाहते हैं?",
+  "ii.renewNow": "अभी नवीनीकृत करें",
+  "ii.noCancel": "नहीं, रद्द करें",
+  "ii.noThanks": "नहीं, धन्यवाद",
+  "ii.skip": "छोड़ें",
+  "ii.expired": "आपकी सुरक्षा समाप्त हो गई है",
+  "ii.scare": "आपका डिवाइस जोखिम में हो सकता है। सुरक्षित रहने के लिए अभी नवीनीकृत करें।",
+  // "ii.acceptRisk": TODO — loaded tone
+  "fa.optional": "नामांकन के लिए अपनी जानकारी साझा करें (वैकल्पिक)।",
+  "fa.required": "इस मुफ़्त कोर्स तक पहुँचने के लिए फ़ोन और ईमेल आवश्यक हैं।",
+  "fa.mustProvide": "इस मुफ़्त कोर्स तक पहुँचने के लिए आपको अपना फ़ोन और ईमेल देना होगा।",
+  "fa.enrol": "नामांकन करें",
+  "fa.skipEnrol": "छोड़ें और नामांकन करें",
+  "fa.continueWithout": "बिना दिए जारी रखें",
+  "fa.leave": "छोड़ें",
+  "fa.enrolFree": "मुफ़्त नामांकन करें",
+  "st.cancel": "सदस्यता रद्द करें",
+  "st.keep": "मेरी सदस्यता बनाए रखें",
+  "sb.autoRenew": "ट्रायल के बाद स्वतः नवीनीकरण",
+  "sb.autoRenewFine": "ट्रायल के बाद {price} पर स्वतः नवीनीकरण",
+  "sb.startTrial": "मुफ़्त ट्रायल शुरू करें",
+  "bns.add": "कार्ट में जोड़ें",
+  "bns.oos": "\"{item}\" स्टॉक में नहीं है। \"{sub}\" ({price}) आज़माएँ?",
+  "bns.addSub": "विकल्प जोड़ें",
+  "bns.noThanks": "नहीं, धन्यवाद",
+  "bns.buy": "{price} में खरीदें",
+  "da.sponsored": "प्रायोजित",
+  "da.ad": "विज्ञापन",
+  "da.advertisement": "विज्ञापन",
+  "da.buy": "खरीदें",
+  "nag.share": "बेहतर अनुभव के लिए अपना स्थान साझा करें?",
+  "nag.yes": "हाँ",
+  "nag.notNow": "अभी नहीं",
+  "nag.finish": "पढ़ना समाप्त करें",
+  "nag.done": "लेख पढ़ लिया।",
+  "tq.control": "मुझे मार्केटिंग ईमेल और अपडेट भेजें",
+  // tq.subtle/moderate/aggressive: TODO(hi) — double negatives don't map 1:1
+  "tq.save": "प्राथमिकताएँ सहेजें",
+  "tq.saved": "प्राथमिकताएँ सहेजी गईं।",
+  "cs.donationLabel": "बाल शिक्षा कोष को ₹50 का दान",
+  "cs.added": "आपके ऑर्डर में जोड़ा गया।",
+  "cs.keep": "दान रखें",
+  "cs.remove": "हटाएँ",
+  // cs.control/subtle/moderate/aggressive: TODO(hi) — guilt framing
+  "cs.keepSupporting": "नहीं, मैं समर्थन जारी रखूँगा",
+  "fu.popular": "लोकप्रिय विकल्प",
+  "fu.only2": "स्टॉक में केवल 2 बचे — जल्दी ऑर्डर करें",
+  "fu.dealEnds": "डील {clock} में समाप्त · 30 लोग देख रहे हैं",
+  "fu.buy": "खरीदें",
+};
+
+// Hinglish — romanised Hindi. Structural template filled; sensitive ones TODO.
+const hinglish: Dict = {
+  "pay": "Pay karein",
+  "orderPlaced": "Order safaltapoorvak ho gaya.",
+  "done": "Done.",
+  "bs.donationLabel": "TicketNest Cares ko {amt} ka donation add karein",
+  "bs.cause": "Vanchit bachchon ki arts education mein support karein.",
+  "bs.contribution": "TicketNest Cares contribution",
+  "bs.remove": "hatayein",
+  "dp.processing": "Processing fee",
+  "dp.serviceHandling": "Service & handling",
+  "dp.viewBreakdown": "Price breakdown dekhein",
+  "ii.renewQ": "Apni subscription renew karna chahte hain?",
+  "ii.renewNow": "Abhi Renew karein",
+  "ii.noCancel": "Nahi, cancel karein",
+  "ii.noThanks": "Nahi, dhanyavaad",
+  "ii.skip": "skip karein",
+  "ii.expired": "Aapki protection expire ho gayi hai",
+  "ii.scare": "Aapka device risk mein ho sakta hai. Safe rehne ke liye abhi renew karein.",
+  // ii.acceptRisk: TODO
+  "fa.optional": "Enrol karne ke liye apni details share karein (optional).",
+  "fa.required": "Is free course ke liye phone aur email zaroori hain.",
+  "fa.mustProvide": "Is free course tak pahunchne ke liye aapko phone aur email dena hoga.",
+  "fa.enrol": "Enrol karein",
+  "fa.skipEnrol": "Skip karke enrol karein",
+  "fa.continueWithout": "bina diye continue karein",
+  "fa.leave": "Chhodein",
+  "fa.enrolFree": "Free enrol karein",
+  "st.cancel": "Subscription cancel karein",
+  "st.keep": "Meri subscription rakhein",
+  "sb.autoRenew": "Trial ke baad auto-renew",
+  "sb.autoRenewFine": "Trial ke baad {price} par auto-renew",
+  "sb.startTrial": "Free trial shuru karein",
+  "bns.add": "Cart mein add karein",
+  "bns.oos": "\"{item}\" stock mein nahi hai. \"{sub}\" ({price}) try karein?",
+  "bns.addSub": "Substitute add karein",
+  "bns.noThanks": "Nahi, dhanyavaad",
+  "bns.buy": "{price} mein khareedein",
+  "da.sponsored": "Sponsored",
+  "da.ad": "Ad",
+  "da.advertisement": "Advertisement",
+  "da.buy": "Khareedein",
+  "nag.share": "Behtar experience ke liye apni location share karein?",
+  "nag.yes": "Haan",
+  "nag.notNow": "Abhi nahi",
+  "nag.finish": "Padhna finish karein",
+  "nag.done": "Article padh liya.",
+  "tq.control": "Mujhe marketing emails aur updates bhejein",
+  // tq sensitive: TODO(hinglish)
+  "tq.save": "Preferences save karein",
+  "tq.saved": "Preferences save ho gayin.",
+  "cs.donationLabel": "Child Education Fund ko ₹50 ka donation",
+  "cs.added": "Aapke order mein add kiya gaya.",
+  "cs.keep": "Donation rakhein",
+  "cs.remove": "Hatayein",
+  // cs sensitive: TODO(hinglish)
+  "cs.keepSupporting": "Nahi, main support jaari rakhunga",
+  "fu.popular": "Popular choice",
+  "fu.only2": "Stock mein sirf 2 bache — jaldi order karein",
+  "fu.dealEnds": "Deal {clock} mein khatam · 30 log dekh rahe hain",
+  "fu.buy": "Khareedein",
+};
+
+const DICTS: Record<Language, Dict> = { en, hi, hinglish };
+
+// t(key, vars?) — looks up the key in the current lang, falls back to English
+// if a (language-sensitive) key hasn't been filled yet, and substitutes {vars}.
+export function t(key: string, vars?: Record<string, string | number>): string {
+  const lang = loadConfig().language;
+  let s = DICTS[lang]?.[key] ?? en[key] ?? key;
+  if (vars) for (const k in vars) s = s.replace(`{${k}}`, String(vars[k]));
+  return s;
+}
