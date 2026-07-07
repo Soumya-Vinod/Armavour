@@ -1,6 +1,6 @@
 # Armavour — Interface Contracts
 
-The five seams where Dev 1's code (testbed, analysis) meets Dev 2's code (harness, auditor, infra). **These are versioned. Changing any of them requires a PR + a heads-up — never a silent edit.** Fields below are proposals derived from the running Phase-1 slice, to be confirmed on the contracts call.
+The five seams where Dev 1's code (testbed, analysis) meets Dev 2's code (harness, auditor, infra). **These are versioned. Changing any of them requires a PR + a heads-up — never a silent edit.** Fields below are signed and canonical for the current implementation slice.
 
 **Casing decision:** all data crossing the boundary uses `snake_case`, so Postgres, Python, and the oracle agree. The testbed (TypeScript) emits snake_case even though camelCase is idiomatic in JS — the testbed bends once so nothing downstream has to translate.
 
