@@ -29,7 +29,7 @@ def build_episode_url(config: EpisodeConfig, *, base_url: str | None = None) -> 
     return f"{base}/?{urlencode(params)}"
 
 
-def create_adapter(config: EpisodeConfig) -> Adapter:
+def create_adapter(config: EpisodeConfig) -> Any:
     if config.agent != "computeruse":
         raise ValueError(f"unsupported agent '{config.agent}'; only 'computeruse' is implemented")
     from harness.adapters.computeruse import Adapter, MAX_STEPS
