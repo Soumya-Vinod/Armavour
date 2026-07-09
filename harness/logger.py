@@ -4,10 +4,13 @@ import os
 from decimal import Decimal
 from typing import Any
 
+from dotenv import load_dotenv
 from sqlalchemy import MetaData, Table, create_engine
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import Engine
+
+load_dotenv()
 
 
 def engine_from_env() -> Engine:

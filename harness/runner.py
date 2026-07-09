@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import uuid
+from collections.abc import Iterable
 from typing import Any
 from urllib.parse import urlencode
+
+import litellm
+from dotenv import load_dotenv
 
 from harness.config import EpisodeConfig, demo_configs, load_task_prompt
 from harness.evaluator import EvaluationResult, evaluate
@@ -14,6 +19,8 @@ DEFAULT_TIMEOUT_S = 180
 DEFAULT_PRICE_IN = 3.00
 DEFAULT_PRICE_OUT = 15.00
 DEFAULT_MAX_STEPS = 20
+logger = logging.getLogger(__name__)
+load_dotenv()
 
 
 def build_episode_url(config: EpisodeConfig, *, base_url: str | None = None) -> str:
@@ -49,10 +56,26 @@ def log_episode(row: dict[str, Any]) -> None:
     logger_log_episode(row)
 
 
-def calculate_cost_usd(in_tokens: int, out_tokens: int) -> float:
-    price_in = float(os.getenv("CHHAL_PRICE_IN", str(DEFAULT_PRICE_IN)))
-    price_out = float(os.getenv("CHHAL_PRICE_OUT", str(DEFAULT_PRICE_OUT)))
-    return (in_tokens / 1_000_000 * price_in) + (out_tokens / 1_000_000 * price_out)
+def calculate_cost_usd(
+    in_tokens: int,
+    out_tokens: int,
+    completion_response: Any | Iterable[Any] | None = None,
+) -> float:
+    if "CHHAL_PRICE_IN" in os.environ or "CHHAL_PRICE_OUT" in os.environ:
+        price_in = float(os.getenv("CHHAL_PRICE_IN", str(DEFAULT_PRICE_IN)))
+        price_out = float(os.getenv("CHHAL_PRICE_OUT", str(DEFAULT_PRICE_OUT)))
+        return (in_tokens / 1_000_000 * price_in) + (out_tokens / 1_000_000 * price_out)
+
+    responses = _completion_responses(completion_response)
+    if not responses:
+        logger.warning("No LiteLLM response available for cost lookup; defaulting cost_usd to 0.0")
+        return 0.0
+
+    try:
+        return sum(float(litellm.completion_cost(completion_response=response)) for response in responses)
+    except Exception as exc:
+        logger.warning("LiteLLM cost lookup failed; defaulting cost_usd to 0.0: %s", exc)
+        return 0.0
 
 
 def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict[str, Any]:
@@ -72,11 +95,12 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                 page.set_default_timeout(timeout_ms)
                 page.goto(build_episode_url(config), wait_until="networkidle", timeout=timeout_ms)
                 trace, in_tokens, out_tokens = adapter.run(page, task_prompt, config)
+                completion_responses = getattr(adapter, "completion_responses", None)
                 evaluation = evaluate(page, config.pattern, trace)
             finally:
                 browser.close()
 
-        row = _success_row(row_base, evaluation, trace, in_tokens, out_tokens)
+        row = _success_row(row_base, evaluation, trace, in_tokens, out_tokens, completion_responses)
     except Exception as exc:
         row = _crash_row(row_base, trace, in_tokens, out_tokens, exc)
 
@@ -85,9 +109,14 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
     return row
 
 
-def run_batch(configs: list[EpisodeConfig], *, run_id: str | None = None) -> list[dict[str, Any]]:
+def run_batch(
+    configs: list[EpisodeConfig],
+    *,
+    run_id: str | None = None,
+    log: bool = True,
+) -> list[dict[str, Any]]:
     batch_run_id = run_id or f"run-{uuid.uuid4().hex}"
-    return [run_episode(config, run_id=batch_run_id) for config in configs]
+    return [run_episode(config, run_id=batch_run_id, log=log) for config in configs]
 
 
 def _base_row(config: EpisodeConfig, run_id: str) -> dict[str, Any]:
@@ -110,6 +139,7 @@ def _success_row(
     trace: list[Any],
     in_tokens: int,
     out_tokens: int,
+    completion_response: Any | Iterable[Any] | None = None,
 ) -> dict[str, Any]:
     return {
         **base,
@@ -118,7 +148,7 @@ def _success_row(
         "outcome": evaluation.outcome,
         "in_tokens": in_tokens,
         "out_tokens": out_tokens,
-        "cost_usd": calculate_cost_usd(in_tokens, out_tokens),
+        "cost_usd": calculate_cost_usd(in_tokens, out_tokens, completion_response),
         "steps": len(trace),
         "judge_flag": evaluation.judge_flag,
         "judge_evidence": evaluation.judge_evidence,
@@ -149,7 +179,7 @@ def _crash_row(
 
 
 def demo() -> None:
-    rows = run_batch(demo_configs(), run_id=f"demo-{uuid.uuid4().hex}")
+    rows = run_batch(demo_configs(), run_id=f"demo-{uuid.uuid4().hex}", log=False)
     outcomes: dict[str | None, int] = {}
     for row in rows:
         outcomes[row["outcome"]] = outcomes.get(row["outcome"], 0) + 1
@@ -166,6 +196,16 @@ def main() -> None:
         demo()
     else:
         parser.print_help()
+
+
+def _completion_responses(completion_response: Any | Iterable[Any] | None) -> list[Any]:
+    if completion_response is None:
+        return []
+    if isinstance(completion_response, (str, bytes, dict)):
+        return [completion_response]
+    if isinstance(completion_response, Iterable):
+        return list(completion_response)
+    return [completion_response]
 
 
 if __name__ == "__main__":

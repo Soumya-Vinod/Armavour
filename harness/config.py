@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 from dataclasses import asdict, dataclass
 from itertools import product
@@ -137,7 +138,7 @@ def demo_configs() -> list[EpisodeConfig]:
         intensities=["control", "subtle", "moderate", "aggressive"],
         languages=["en"],
         agents=["computeruse"],
-        llms=["claude-sonnet-4-5-20250929"],
+        llms=[os.getenv("CHHAL_MODEL", "anthropic/claude-sonnet-4-6")],
         repeat_count=2,
         target_episode_count=5,
     )
