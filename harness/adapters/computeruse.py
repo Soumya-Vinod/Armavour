@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any
 
-from anthropic import Anthropic
+import litellm
 from playwright.sync_api import ElementHandle, Page
 
 from harness.extract import extract_elements
 
 MAX_STEPS = 20
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -20,14 +22,13 @@ class Adapter:
 
     def __post_init__(self) -> None:
         self.model = self.model or os.getenv("CHHAL_MODEL")
-        self.client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY")) if os.getenv("ANTHROPIC_API_KEY") else None
+        self.completion_responses: list[Any] = []
 
     def run(self, page: Page, task: str, config: Any) -> tuple[list[dict[str, Any]], int, int]:
-        if self.client is None:
-            raise RuntimeError("ANTHROPIC_API_KEY is required to run the computeruse adapter")
         if not self.model:
             raise RuntimeError("CHHAL_MODEL is required to run the computeruse adapter")
 
+        self.completion_responses = []
         trace: list[dict[str, Any]] = []
         in_tokens = 0
         out_tokens = 0
@@ -71,21 +72,21 @@ class Adapter:
                 "click, check, uncheck, fill, done."
             ),
         }
-        response = self.client.messages.create(
+        response = litellm.completion(
             model=self.model,
             max_tokens=500,
+            response_format={"type": "json_object"},
+            drop_params=True,
             messages=[{"role": "user", "content": json.dumps(prompt, sort_keys=True)}],
         )
+        self.completion_responses.append(response)
         text = _response_text(response)
         try:
             action = json.loads(text)
         except json.JSONDecodeError as exc:
             raise ValueError(f"Model did not return valid JSON: {text}") from exc
 
-        return action, {
-            "in_tokens": getattr(response.usage, "input_tokens", 0),
-            "out_tokens": getattr(response.usage, "output_tokens", 0),
-        }
+        return action, _usage_tokens(response)
 
     def _execute(self, action: dict[str, Any], handle_map: dict[int, ElementHandle]) -> None:
         action_name = action.get("action")
@@ -107,12 +108,49 @@ class Adapter:
 
 
 def _response_text(response: Any) -> str:
-    parts: list[str] = []
-    for block in response.content:
-        text = getattr(block, "text", None)
-        if text:
-            parts.append(text)
-    return "\n".join(parts).strip()
+    choice = response.choices[0]
+    message = getattr(choice, "message", None)
+    if message is None and isinstance(choice, dict):
+        message = choice.get("message")
+
+    content = getattr(message, "content", None)
+    if content is None and isinstance(message, dict):
+        content = message.get("content")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            text = getattr(block, "text", None)
+            if text is None and isinstance(block, dict):
+                text = block.get("text")
+            if text:
+                parts.append(str(text))
+        return "\n".join(parts).strip()
+    return ""
+
+
+def _usage_tokens(response: Any) -> dict[str, int]:
+    usage = getattr(response, "usage", None)
+    if usage is None and isinstance(response, dict):
+        usage = response.get("usage")
+    if usage is None:
+        logger.warning("LiteLLM response omitted token usage; defaulting token counts to 0")
+        return {"in_tokens": 0, "out_tokens": 0}
+
+    prompt_tokens = getattr(usage, "prompt_tokens", None)
+    completion_tokens = getattr(usage, "completion_tokens", None)
+    if isinstance(usage, dict):
+        prompt_tokens = usage.get("prompt_tokens", prompt_tokens)
+        completion_tokens = usage.get("completion_tokens", completion_tokens)
+
+    if prompt_tokens is None or completion_tokens is None:
+        logger.warning("LiteLLM response usage was incomplete; defaulting missing token counts to 0")
+
+    return {
+        "in_tokens": int(prompt_tokens or 0),
+        "out_tokens": int(completion_tokens or 0),
+    }
 
 
 def _jsonable(value: Any) -> Any:
