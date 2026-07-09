@@ -74,7 +74,7 @@ class Adapter:
         }
         response = litellm.completion(
             model=self.model,
-            max_tokens=500,
+            max_tokens=1000,
             response_format={"type": "json_object"},
             drop_params=True,
             messages=[{"role": "user", "content": json.dumps(prompt, sort_keys=True)}],
