@@ -12,6 +12,7 @@ from playwright.sync_api import ElementHandle, Page
 from harness.extract import extract_elements
 
 MAX_STEPS = 20
+DEFAULT_PROVIDER_TIMEOUT_S = 60
 logger = logging.getLogger(__name__)
 
 
@@ -28,12 +29,15 @@ class Adapter:
         if not self.model:
             raise RuntimeError("CHHAL_MODEL is required to run the computeruse adapter")
 
+        show_progress = os.getenv("CHHAL_PROGRESS") == "1"
         self.completion_responses = []
         trace: list[dict[str, Any]] = []
         in_tokens = 0
         out_tokens = 0
 
         for step in range(self.max_steps):
+            if show_progress:
+                print({"event": "adapter_step_start", "step": step, "max_steps": self.max_steps}, flush=True)
             elements, handle_map = extract_elements(page)
             action, usage = self._next_action(task, config, elements, trace)
             in_tokens += usage.get("in_tokens", 0)
@@ -48,6 +52,8 @@ class Adapter:
                 }
             )
 
+            if show_progress:
+                print({"event": "adapter_step_end", "step": step, "action": action.get("action")}, flush=True)
             if action.get("action") == "done":
                 break
             self._execute(action, handle_map)
@@ -77,6 +83,7 @@ class Adapter:
             max_tokens=1000,
             response_format={"type": "json_object"},
             drop_params=True,
+            timeout=float(os.getenv("CHHAL_PROVIDER_TIMEOUT_S", str(DEFAULT_PROVIDER_TIMEOUT_S))),
             messages=[{"role": "user", "content": json.dumps(prompt, sort_keys=True)}],
         )
         self.completion_responses.append(response)

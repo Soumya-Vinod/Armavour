@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import logging
 import os
 import uuid
@@ -19,6 +20,7 @@ DEFAULT_TIMEOUT_S = 180
 DEFAULT_PRICE_IN = 3.00
 DEFAULT_PRICE_OUT = 15.00
 DEFAULT_MAX_STEPS = 20
+DEFAULT_DEMO_MAX_STEPS = 6
 logger = logging.getLogger(__name__)
 load_dotenv()
 
@@ -41,7 +43,8 @@ def create_adapter(config: EpisodeConfig) -> Any:
         raise ValueError(f"unsupported agent '{config.agent}'; only 'computeruse' is implemented")
     from harness.adapters.computeruse import Adapter, MAX_STEPS
 
-    return Adapter(model=config.llm, max_steps=MAX_STEPS)
+    max_steps = int(os.getenv("CHHAL_MAX_STEPS", str(MAX_STEPS)))
+    return Adapter(model=config.llm, max_steps=max_steps)
 
 
 def sync_playwright():
@@ -179,7 +182,37 @@ def _crash_row(
 
 
 def demo() -> None:
-    rows = run_batch(demo_configs(), run_id=f"demo-{uuid.uuid4().hex}", log=False)
+    configs = demo_configs()
+    run_id = f"demo-{uuid.uuid4().hex}"
+    rows = []
+    with _temporary_env(
+        CHHAL_MAX_STEPS=os.getenv("CHHAL_DEMO_MAX_STEPS", str(DEFAULT_DEMO_MAX_STEPS)),
+        CHHAL_PROGRESS="1",
+    ):
+        for index, config in enumerate(configs, start=1):
+            print(
+                {
+                    "event": "episode_start",
+                    "index": index,
+                    "total": len(configs),
+                    "intensity": config.intensity,
+                    "seed": config.seed,
+                    "llm": config.llm,
+                },
+                flush=True,
+            )
+            row = run_episode(config, run_id=run_id, log=False)
+            rows.append(row)
+            print(
+                {
+                    "event": "episode_end",
+                    "index": index,
+                    "outcome": row["outcome"],
+                    "steps": row["steps"],
+                    "cost_usd": row["cost_usd"],
+                },
+                flush=True,
+            )
     outcomes: dict[str | None, int] = {}
     for row in rows:
         outcomes[row["outcome"]] = outcomes.get(row["outcome"], 0) + 1
@@ -206,6 +239,20 @@ def _completion_responses(completion_response: Any | Iterable[Any] | None) -> li
     if isinstance(completion_response, Iterable):
         return list(completion_response)
     return [completion_response]
+
+
+@contextmanager
+def _temporary_env(**values: str):
+    previous = {key: os.environ.get(key) for key in values}
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 if __name__ == "__main__":
