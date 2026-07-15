@@ -108,7 +108,21 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
         row = _crash_row(row_base, trace, in_tokens, out_tokens, exc)
 
     if log:
-        log_episode(row)
+        try:
+            log_episode(row)
+        except Exception as log_exc:
+            print(
+                {
+                    "event": "episode_log_failed",
+                    "config_hash": row_base.get("config_hash"),
+                    "run_id": row_base.get("run_id"),
+                    "original_trace": row.get("trace"),
+                    "log_exception": f"{type(log_exc).__name__}: {log_exc}",
+                },
+                flush=True,
+            )
+            if row.get("outcome") is not None:
+                raise
     return row
 
 
@@ -201,7 +215,7 @@ def demo() -> None:
                 },
                 flush=True,
             )
-            row = run_episode(config, run_id=run_id, log=False)
+            row = run_episode(config, run_id=run_id, log=True)
             rows.append(row)
             print(
                 {

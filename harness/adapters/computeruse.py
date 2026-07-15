@@ -7,12 +7,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import litellm
-from playwright.sync_api import ElementHandle, Page
+from playwright.sync_api import ElementHandle, Error as PlaywrightError, Page
 
-from harness.extract import extract_elements
+from harness.extract import PageExtractionError, extract_elements
 
 MAX_STEPS = 20
 DEFAULT_PROVIDER_TIMEOUT_S = 60
+DEFAULT_ACTION_TIMEOUT_S = 10
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +39,13 @@ class Adapter:
         for step in range(self.max_steps):
             if show_progress:
                 print({"event": "adapter_step_start", "step": step, "max_steps": self.max_steps}, flush=True)
-            elements, handle_map = extract_elements(page)
+            try:
+                elements, handle_map = extract_elements(page)
+            except PageExtractionError:
+                if _last_action_was_click(trace):
+                    logger.warning("Treating post-click page extraction failure as terminal")
+                    break
+                raise
             action, usage = self._next_action(task, config, elements, trace)
             in_tokens += usage.get("in_tokens", 0)
             out_tokens += usage.get("out_tokens", 0)
@@ -56,7 +63,13 @@ class Adapter:
                 print({"event": "adapter_step_end", "step": step, "action": action.get("action")}, flush=True)
             if action.get("action") == "done":
                 break
-            self._execute(action, handle_map)
+            try:
+                self._execute(action, handle_map)
+            except PlaywrightError as exc:
+                if action.get("action") == "click" and _terminal_click_error(exc):
+                    logger.warning("Treating terminal click failure as end of adapter run: %s", exc)
+                    break
+                raise
 
         return trace, in_tokens, out_tokens
 
@@ -103,7 +116,7 @@ class Adapter:
 
         handle = handle_map[index]
         if action_name == "click":
-            handle.click()
+            handle.click(timeout=_action_timeout_ms())
         elif action_name == "check":
             handle.check()
         elif action_name == "uncheck":
@@ -166,3 +179,29 @@ def _jsonable(value: Any) -> Any:
     if hasattr(value, "__dict__"):
         return value.__dict__
     return value
+
+
+def _last_action_was_click(trace: list[dict[str, Any]]) -> bool:
+    if not trace:
+        return False
+    action = trace[-1].get("action")
+    return isinstance(action, dict) and action.get("action") == "click"
+
+
+def _terminal_click_error(exc: PlaywrightError) -> bool:
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in (
+            "timeout",
+            "element is not enabled",
+            "execution context was destroyed",
+            "target closed",
+            "page closed",
+            "frame was detached",
+        )
+    )
+
+
+def _action_timeout_ms() -> int:
+    return int(float(os.getenv("CHHAL_ACTION_TIMEOUT_S", str(DEFAULT_ACTION_TIMEOUT_S))) * 1000)

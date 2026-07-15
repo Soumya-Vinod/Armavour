@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from playwright.sync_api import ElementHandle, Page
+from playwright.sync_api import ElementHandle, Error as PlaywrightError, Page
 
 INTERACTIVE_SELECTOR = (
     "button, "
@@ -18,6 +18,10 @@ INTERACTIVE_SELECTOR = (
     "[role='radio'], "
     "[tabindex]:not([tabindex='-1'])"
 )
+
+
+class PageExtractionError(RuntimeError):
+    """Raised when the page cannot be inspected safely."""
 
 
 @dataclass(frozen=True)
@@ -41,32 +45,40 @@ class ElementInfo:
 
 
 def extract_elements(page: Page) -> tuple[list[dict[str, Any]], dict[int, ElementHandle]]:
+    if page.is_closed():
+        raise PageExtractionError("cannot extract elements from a closed page")
+
     elements: list[dict[str, Any]] = []
     handles: dict[int, ElementHandle] = {}
     seen_ids: set[str] = set()
 
-    for handle in page.query_selector_all(INTERACTIVE_SELECTOR):
-        if not handle.is_visible():
-            continue
+    try:
+        for handle in page.query_selector_all(INTERACTIVE_SELECTOR):
+            if not handle.is_visible():
+                continue
 
-        element_id = (handle.get_attribute("id") or "").strip()
-        if not element_id:
-            continue
-        if element_id in seen_ids:
-            raise ValueError(f"Duplicate interactive element id found: {element_id}")
-        seen_ids.add(element_id)
+            element_id = (handle.get_attribute("id") or "").strip()
+            if not element_id:
+                continue
+            if element_id in seen_ids:
+                raise ValueError(f"Duplicate interactive element id found: {element_id}")
+            seen_ids.add(element_id)
 
-        index = len(elements)
-        info = ElementInfo(
-            index=index,
-            id=element_id,
-            role=_role(handle),
-            text=_text(handle),
-            checked=_checked(handle),
-            visible=True,
-        )
-        elements.append(info.to_dict())
-        handles[index] = handle
+            index = len(elements)
+            info = ElementInfo(
+                index=index,
+                id=element_id,
+                role=_role(handle),
+                text=_text(handle),
+                checked=_checked(handle),
+                visible=True,
+            )
+            elements.append(info.to_dict())
+            handles[index] = handle
+    except PlaywrightError as exc:
+        if _page_unavailable(exc):
+            raise PageExtractionError(f"cannot extract elements from unavailable page: {exc}") from exc
+        raise
 
     return elements, handles
 
@@ -115,3 +127,17 @@ def _checked(handle: ElementHandle) -> bool | None:
     if aria_checked is not None:
         return aria_checked.lower() == "true"
     return None
+
+
+def _page_unavailable(exc: PlaywrightError) -> bool:
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in (
+            "execution context was destroyed",
+            "target closed",
+            "page closed",
+            "frame was detached",
+            "navigation",
+        )
+    )
