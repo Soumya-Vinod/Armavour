@@ -8,9 +8,9 @@ from harness.runner import calculate_cost_usd, create_adapter, run_episode
 
 
 def test_create_adapter_rejects_unsupported_agent() -> None:
-    config = config_with(agent="browseruse")
+    config = config_with(agent="unknown")
 
-    with pytest.raises(ValueError, match="unsupported agent"):
+    with pytest.raises(NotImplementedError, match="computeruse, browseruse, agente"):
         create_adapter(config)
 
 

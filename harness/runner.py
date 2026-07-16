@@ -39,12 +39,23 @@ def build_episode_url(config: EpisodeConfig, *, base_url: str | None = None) -> 
 
 
 def create_adapter(config: EpisodeConfig) -> Any:
-    if config.agent != "computeruse":
-        raise ValueError(f"unsupported agent '{config.agent}'; only 'computeruse' is implemented")
-    from harness.adapters.computeruse import Adapter, MAX_STEPS
+    from harness.adapters.common import MAX_STEPS
+
+    registry = {
+        "computeruse": "harness.adapters.computeruse",
+        "browseruse": "harness.adapters.browseruse",
+        "agente": "harness.adapters.agente",
+    }
+    module_name = registry.get(config.agent)
+    if module_name is None:
+        supported = ", ".join(registry)
+        raise NotImplementedError(f"unsupported agent '{config.agent}'; supported agents: {supported}")
+
+    from importlib import import_module
 
     max_steps = int(os.getenv("CHHAL_MAX_STEPS", str(MAX_STEPS)))
-    return Adapter(model=config.llm, max_steps=max_steps)
+    adapter_module = import_module(module_name)
+    return adapter_module.Adapter(model=config.llm, max_steps=max_steps)
 
 
 def sync_playwright():
