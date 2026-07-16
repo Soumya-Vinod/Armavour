@@ -1,0 +1,5 @@
+from __future__ import annotations
+
+MAX_STEPS = 20
+DEFAULT_PROVIDER_TIMEOUT_S = 60
+DEFAULT_ACTION_TIMEOUT_S = 10
