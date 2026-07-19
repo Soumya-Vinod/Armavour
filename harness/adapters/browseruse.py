@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 import os
@@ -28,7 +29,7 @@ class Adapter:
             raise RuntimeError("CHHAL_MODEL is required to run the browseruse adapter")
 
         trace: list[str] = []
-        history, oracle = asyncio.run(self._run_browseruse(task, config, trace))
+        history, oracle = _run_in_thread(self._run_browseruse(task, config, trace))
         trace.extend(_trace_from_history(history))
         in_tokens, out_tokens = _usage_tokens(history)
         if oracle is not None:
@@ -84,6 +85,12 @@ class Adapter:
             return empty_history, None
         finally:
             await _close_browser_session(session)
+
+
+def _run_in_thread(coro: Any) -> Any:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(asyncio.run, coro)
+        return future.result()
 
 
 def _load_browser_use() -> Any:
