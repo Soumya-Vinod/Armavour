@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import logging
 import os
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Any
 from urllib.parse import urlencode
 
@@ -21,6 +21,20 @@ DEFAULT_PRICE_IN = 3.00
 DEFAULT_PRICE_OUT = 15.00
 DEFAULT_MAX_STEPS = 20
 DEFAULT_DEMO_MAX_STEPS = 6
+PRECHECK_PATTERN_TASKS = (
+    ("false_urgency", "fu_best"),
+    ("basket_sneaking", "bs_ticket"),
+    ("confirm_shaming", "cs_donation"),
+    ("forced_action", "fa_course"),
+    ("subscription_trap", "st_cancel"),
+    ("interface_interference", "ii_renew"),
+    ("bait_and_switch", "bns_item"),
+    ("drip_pricing", "dp_ticket"),
+    ("disguised_advertisement", "da_cheapest"),
+    ("nagging", "nag_task"),
+    ("trick_question", "tq_prefs"),
+    ("saas_billing", "sb_free"),
+)
 logger = logging.getLogger(__name__)
 load_dotenv()
 
@@ -142,9 +156,19 @@ def run_batch(
     *,
     run_id: str | None = None,
     log: bool = True,
+    on_episode_start: Callable[[int, EpisodeConfig], None] | None = None,
+    on_episode_end: Callable[[int, EpisodeConfig, dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     batch_run_id = run_id or f"run-{uuid.uuid4().hex}"
-    return [run_episode(config, run_id=batch_run_id, log=log) for config in configs]
+    rows = []
+    for index, config in enumerate(configs, start=1):
+        if on_episode_start is not None:
+            on_episode_start(index, config)
+        row = run_episode(config, run_id=batch_run_id, log=log)
+        rows.append(row)
+        if on_episode_end is not None:
+            on_episode_end(index, config, row)
+    return rows
 
 
 def _base_row(config: EpisodeConfig, run_id: str) -> dict[str, Any]:
@@ -246,12 +270,82 @@ def demo() -> None:
         print({key: row[key] for key in ("config_hash", "pattern", "outcome", "cost_usd")})
 
 
+def precheck_configs() -> list[EpisodeConfig]:
+    return [
+        EpisodeConfig(
+            site="ticketing",
+            task_id=task_id,
+            pattern=pattern,
+            intensity="moderate",
+            language="en",
+            agent="computeruse",
+            llm=os.getenv("CHHAL_MODEL", "anthropic/claude-sonnet-4-6"),
+            seed=0,
+        )
+        for pattern, task_id in PRECHECK_PATTERN_TASKS
+    ]
+
+
+def precheck() -> None:
+    configs = precheck_configs()
+    run_id = f"precheck-{uuid.uuid4().hex}"
+
+    def print_episode_start(index: int, config: EpisodeConfig) -> None:
+        print(
+            {
+                "event": "precheck_episode_start",
+                "index": index,
+                "total": len(configs),
+                "pattern": config.pattern,
+            },
+            flush=True,
+        )
+
+    def print_episode_summary(index: int, config: EpisodeConfig, row: dict[str, Any]) -> None:
+        print(
+            {
+                "event": "precheck_episode_end",
+                "index": index,
+                "total": len(configs),
+                "pattern": config.pattern,
+                "outcome": row["outcome"],
+                "steps": row["steps"],
+                "cost_usd": row["cost_usd"],
+                "crash_row_written": row["outcome"] is None,
+            },
+            flush=True,
+        )
+
+    rows = run_batch(
+        configs,
+        run_id=run_id,
+        log=True,
+        on_episode_start=print_episode_start,
+        on_episode_end=print_episode_summary,
+    )
+    clean = sum(1 for row in rows if row["outcome"] is not None)
+    crashed = len(rows) - clean
+    print(
+        {
+            "event": "precheck_summary",
+            "patterns": len(rows),
+            "completed_cleanly": clean,
+            "crashed": crashed,
+            "passed": crashed == 0,
+        },
+        flush=True,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Armavour harness episodes.")
     parser.add_argument("--demo", action="store_true", help="Run a small demo batch.")
+    parser.add_argument("--precheck", action="store_true", help="Run one moderate computeruse episode per pattern.")
     args = parser.parse_args()
     if args.demo:
         demo()
+    elif args.precheck:
+        precheck()
     else:
         parser.print_help()
 
