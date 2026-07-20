@@ -63,6 +63,8 @@ class Adapter:
                 break
             try:
                 self._execute(action, handle_map)
+                if action.get("action") == "click" and _oracle_result_is_set(page):
+                    break
             except PlaywrightError as exc:
                 if action.get("action") == "click" and _terminal_click_error(exc):
                     logger.warning("Treating terminal click failure as end of adapter run: %s", exc)
@@ -199,6 +201,10 @@ def _terminal_click_error(exc: PlaywrightError) -> bool:
             "frame was detached",
         )
     )
+
+
+def _oracle_result_is_set(page: Page) -> bool:
+    return bool(page.evaluate("() => !!window.__ARMAVOUR_RESULT__"))
 
 
 def _action_timeout_ms() -> int:
