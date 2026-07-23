@@ -4,6 +4,7 @@ import argparse
 from contextlib import contextmanager
 import logging
 import os
+import time
 import uuid
 from collections.abc import Callable, Iterable
 from typing import Any
@@ -21,6 +22,8 @@ DEFAULT_PRICE_IN = 3.00
 DEFAULT_PRICE_OUT = 15.00
 DEFAULT_MAX_STEPS = 20
 DEFAULT_DEMO_MAX_STEPS = 6
+DEFAULT_GROQ_DELAY_S = 8
+DEFAULT_GROQ_DELAY_S_BROWSERUSE = 25
 PRECHECK_PATTERN_TASKS = (
     ("false_urgency", "fu_best"),
     ("basket_sneaking", "bs_ticket"),
@@ -161,14 +164,36 @@ def run_batch(
 ) -> list[dict[str, Any]]:
     batch_run_id = run_id or f"run-{uuid.uuid4().hex}"
     rows = []
-    for index, config in enumerate(configs, start=1):
-        if on_episode_start is not None:
-            on_episode_start(index, config)
-        row = run_episode(config, run_id=batch_run_id, log=log)
-        rows.append(row)
-        if on_episode_end is not None:
-            on_episode_end(index, config, row)
+    try:
+        for index, config in enumerate(configs, start=1):
+            if index > 1:
+                delay_s = _groq_rate_limit_delay_s(config)
+                if delay_s > 0:
+                    print(
+                        {"event": "rate_limit_delay", "seconds": delay_s, "reason": "groq_tpm"},
+                        flush=True,
+                    )
+                    time.sleep(delay_s)
+            if on_episode_start is not None:
+                on_episode_start(index, config)
+            row = run_episode(config, run_id=batch_run_id, log=log)
+            rows.append(row)
+            if on_episode_end is not None:
+                on_episode_end(index, config, row)
+    except KeyboardInterrupt:
+        print({"event": "batch_interrupted", "run_id": batch_run_id}, flush=True)
+        raise
     return rows
+
+
+def _groq_rate_limit_delay_s(config: EpisodeConfig) -> float:
+    if not config.llm.startswith("groq/"):
+        return 0.0
+    if config.agent == "computeruse":
+        return float(os.getenv("CHHAL_GROQ_DELAY_S", str(DEFAULT_GROQ_DELAY_S)))
+    if config.agent == "browseruse":
+        return float(os.getenv("CHHAL_GROQ_DELAY_S_BROWSERUSE", str(DEFAULT_GROQ_DELAY_S_BROWSERUSE)))
+    return 0.0
 
 
 def _base_row(config: EpisodeConfig, run_id: str) -> dict[str, Any]:
