@@ -4,6 +4,7 @@ import argparse
 from contextlib import contextmanager
 import logging
 import os
+import random
 import time
 import uuid
 from collections.abc import Callable, Iterable
@@ -12,6 +13,7 @@ from urllib.parse import urlencode
 
 import litellm
 from dotenv import load_dotenv
+from litellm.exceptions import RateLimitError
 
 from harness.config import EpisodeConfig, demo_configs, load_task_prompt
 from harness.evaluator import EvaluationResult, evaluate
@@ -24,6 +26,9 @@ DEFAULT_MAX_STEPS = 20
 DEFAULT_DEMO_MAX_STEPS = 6
 DEFAULT_GROQ_DELAY_S = 8
 DEFAULT_GROQ_DELAY_S_BROWSERUSE = 25
+DEFAULT_RATE_LIMIT_RETRIES = 3
+RATE_LIMIT_BACKOFF_BASE_S = 30
+RATE_LIMIT_BACKOFF_JITTER_S = 5
 PRECHECK_PATTERN_TASKS = (
     ("false_urgency", "fu_best"),
     ("basket_sneaking", "bs_ticket"),
@@ -125,7 +130,12 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                 page = browser.new_page()
                 page.set_default_timeout(timeout_ms)
                 page.goto(build_episode_url(config), wait_until="networkidle", timeout=timeout_ms)
-                trace, in_tokens, out_tokens = adapter.run(page, task_prompt, config)
+                trace, in_tokens, out_tokens = _run_adapter_with_rate_limit_retry(
+                    adapter,
+                    page,
+                    task_prompt,
+                    config,
+                )
                 completion_responses = getattr(adapter, "completion_responses", None)
                 evaluation = evaluate(page, config.pattern, trace)
             finally:
@@ -194,6 +204,43 @@ def _groq_rate_limit_delay_s(config: EpisodeConfig) -> float:
     if config.agent == "browseruse":
         return float(os.getenv("CHHAL_GROQ_DELAY_S_BROWSERUSE", str(DEFAULT_GROQ_DELAY_S_BROWSERUSE)))
     return 0.0
+
+
+def _run_adapter_with_rate_limit_retry(
+    adapter: Any,
+    page: Any,
+    task_prompt: str,
+    config: EpisodeConfig,
+) -> tuple[list[Any], int, int]:
+    max_retries = int(os.getenv("CHHAL_RATE_LIMIT_RETRIES", str(DEFAULT_RATE_LIMIT_RETRIES)))
+    attempt = 0
+    while True:
+        try:
+            return adapter.run(page, task_prompt, config)
+        except Exception as exc:
+            if not _is_rate_limit_error(exc) or attempt >= max_retries:
+                raise
+            attempt += 1
+            wait_s = _rate_limit_backoff_s(attempt)
+            print(
+                {
+                    "event": "rate_limit_retry",
+                    "attempt": attempt,
+                    "wait_seconds": wait_s,
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+                flush=True,
+            )
+            time.sleep(wait_s)
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    return isinstance(exc, RateLimitError) or "RateLimitError" in type(exc).__name__ or "RateLimitError" in str(exc)
+
+
+def _rate_limit_backoff_s(attempt: int) -> float:
+    backoff_s = RATE_LIMIT_BACKOFF_BASE_S * (2 ** (attempt - 1))
+    return max(0.0, backoff_s + random.uniform(-RATE_LIMIT_BACKOFF_JITTER_S, RATE_LIMIT_BACKOFF_JITTER_S))
 
 
 def _base_row(config: EpisodeConfig, run_id: str) -> dict[str, Any]:
