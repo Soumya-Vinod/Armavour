@@ -2,11 +2,11 @@ import sys
 
 sys.path.insert(0, ".")
 
+from sqlalchemy import select
+
 from harness.config import enumerate_configs
 from harness.logger import engine_from_env, episodes_table
 from harness.runner import run_batch
-from sqlalchemy import select
-
 
 RUN_ID = "pilot-01"
 

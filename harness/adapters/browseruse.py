@@ -79,7 +79,7 @@ class Adapter:
             )
             oracle = await _read_browseruse_oracle(agent)
             return history, oracle
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - preserve adapter failures as trace rows.
             trace.append(f"{type(exc).__name__}: {exc}")
             empty_history = getattr(agent, "history", None)
             return empty_history, None
@@ -122,7 +122,7 @@ def _coerce_oracle(raw_oracle: Any) -> dict[str, Any] | None:
             return None
         if isinstance(parsed, dict):
             return parsed
-    raise ValueError("window.__ARMAVOUR_RESULT__ must be an object")
+    raise TypeError("window.__ARMAVOUR_RESULT__ must be an object")
 
 
 def _copy_oracle_to_runner_page(page: Page, oracle: dict[str, Any]) -> None:
@@ -132,7 +132,7 @@ def _copy_oracle_to_runner_page(page: Page, oracle: dict[str, Any]) -> None:
 async def _close_browser_session(session: Any) -> None:
     try:
         await session.kill()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - best-effort cleanup should not mask the episode result.
         logger.warning("Failed to close browser-use browser session cleanly: %s", exc)
 
 

@@ -7,9 +7,14 @@ from dataclasses import dataclass
 from typing import Any
 
 import litellm
-from playwright.sync_api import ElementHandle, Error as PlaywrightError, Page
+from playwright.sync_api import ElementHandle, Page
+from playwright.sync_api import Error as PlaywrightError
 
-from harness.adapters.common import DEFAULT_ACTION_TIMEOUT_S, DEFAULT_PROVIDER_TIMEOUT_S, MAX_STEPS
+from harness.adapters.common import (
+    DEFAULT_ACTION_TIMEOUT_S,
+    DEFAULT_PROVIDER_TIMEOUT_S,
+    MAX_STEPS,
+)
 from harness.extract import PageExtractionError, extract_elements
 
 logger = logging.getLogger(__name__)

@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from playwright.sync_api import ElementHandle, Error as PlaywrightError, Page
+from playwright.sync_api import ElementHandle, Page
+from playwright.sync_api import Error as PlaywrightError
 
 INTERACTIVE_SELECTOR = (
     "button, "

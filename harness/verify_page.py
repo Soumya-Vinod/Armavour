@@ -1,5 +1,6 @@
 """verify_page.py — Zero-API sanity check for the Armavour spike."""
 import pathlib
+
 from playwright.sync_api import sync_playwright
 
 PAGE = (pathlib.Path(__file__).parent.parent / "testbed" / "spike" / "checkout.html").resolve().as_uri()

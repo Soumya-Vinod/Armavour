@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-import pytest
+import sqlalchemy as sa
+from sqlalchemy import create_engine, select
 
-sa = pytest.importorskip("sqlalchemy")
-from sqlalchemy import create_engine, select  # noqa: E402
-
-from harness.logger import log_episode  # noqa: E402
+from harness.logger import log_episode
 
 
 def test_log_episode_upserts_on_config_hash_and_run_id() -> None:

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 import logging
 import os
 import random
 import time
 import uuid
 from collections.abc import Callable, Iterable
+from contextlib import contextmanager
 from typing import Any
 from urllib.parse import urlencode
 
@@ -113,7 +113,7 @@ def calculate_cost_usd(
             float(litellm.completion_cost(completion_response=response, model=model))
             for response in responses
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - pricing lookup failures must not fail an episode.
         logger.warning("LiteLLM cost lookup failed; defaulting cost_usd to 0.0: %s", exc)
         return 0.0
 
@@ -146,7 +146,7 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                 browser.close()
 
         row = _success_row(row_base, evaluation, trace, in_tokens, out_tokens, completion_responses)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - record harness failures as crash rows.
         row = _crash_row(row_base, trace, in_tokens, out_tokens, exc)
 
     if log:
