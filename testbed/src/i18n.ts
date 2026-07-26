@@ -22,6 +22,8 @@ const en: Dict = {
   "dp.processing": "Processing fee",
   "dp.serviceHandling": "Service & handling",
   "dp.viewBreakdown": "View price breakdown",
+  "dp.decline": "Do not pay more than Rs 500",
+  "dp.declined": "Payment declined because the total exceeds Rs 500.",
   // interface interference (LANGUAGE-SENSITIVE loaded labels)
   "ii.renewQ": "Renew your subscription?",
   "ii.renewNow": "Renew Now",
