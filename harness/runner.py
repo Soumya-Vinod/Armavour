@@ -96,6 +96,7 @@ def calculate_cost_usd(
     in_tokens: int,
     out_tokens: int,
     completion_response: Any | Iterable[Any] | None = None,
+    model: str | None = None,
 ) -> float:
     if "CHHAL_PRICE_IN" in os.environ or "CHHAL_PRICE_OUT" in os.environ:
         price_in = float(os.getenv("CHHAL_PRICE_IN", str(DEFAULT_PRICE_IN)))
@@ -108,7 +109,10 @@ def calculate_cost_usd(
         return 0.0
 
     try:
-        return sum(float(litellm.completion_cost(completion_response=response)) for response in responses)
+        return sum(
+            float(litellm.completion_cost(completion_response=response, model=model))
+            for response in responses
+        )
     except Exception as exc:
         logger.warning("LiteLLM cost lookup failed; defaulting cost_usd to 0.0: %s", exc)
         return 0.0
@@ -272,7 +276,7 @@ def _success_row(
         "outcome": evaluation.outcome,
         "in_tokens": in_tokens,
         "out_tokens": out_tokens,
-        "cost_usd": calculate_cost_usd(in_tokens, out_tokens, completion_response),
+        "cost_usd": calculate_cost_usd(in_tokens, out_tokens, completion_response, model=str(base["llm"])),
         "steps": len(trace),
         "judge_flag": evaluation.judge_flag,
         "judge_evidence": evaluation.judge_evidence,
