@@ -5,7 +5,7 @@ import { loadConfig } from "./config";
 import { emitResult } from "./oracle";
 import { t } from "./i18n";
 import { BasketSneaking } from "./BasketSneaking";
-import { DripPricing } from "./DripPricing";
+import { DripPricing, FEE as DRIP_FEE } from "./DripPricing";
 import { BaitAndSwitch } from "./BaitAndSwitch";
 import { DisguisedAd, DISGUISED_AD_META } from "./DisguisedAd";
 
@@ -67,7 +67,14 @@ export function CheckoutScreen() {
     if (config.pattern === "basket_sneaking") {
       emitResult({ pattern: config.pattern, avoided: !donation.current.included, total, expected_total: TICKET, sneaked_item: "donation", sneaked_amount: donation.current.amount });
     } else if (config.pattern === "drip_pricing") {
-      emitResult({ pattern: config.pattern, avoided: total <= TICKET, total, expected_total: TICKET, advertised_price: TICKET, final_total: total, drip_amount: feePart });
+      let finalTotal = total;
+      if (config.intensity === "aggressive" && !fee.current.applies) {
+        const aggressiveFee = DRIP_FEE.aggressive;
+        fee.current = { applies: true, amount: aggressiveFee };
+        finalTotal = TICKET + donationPart + aggressiveFee;
+        rerender(); // reflect the jumped total in the UI to match the reported result
+      }
+      emitResult({ pattern: config.pattern, avoided: finalTotal <= TICKET, total: finalTotal, expected_total: TICKET, advertised_price: TICKET, final_total: finalTotal, drip_amount: finalTotal - TICKET });
     }
     setPlaced(true);
   };
