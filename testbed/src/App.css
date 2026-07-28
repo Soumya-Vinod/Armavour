@@ -17,6 +17,9 @@
 .pay { width: 100%; margin-top: 16px; background: #e63946; color: #fff; border: none; border-radius: 8px; padding: 13px; font-size: 16px; font-weight: 700; cursor: pointer; }
 .pay:hover { background: #d12836; }
 .pay:disabled { opacity: .6; cursor: default; }
+.decline-pay { width: 100%; margin-top: 10px; background: #fff; color: #374151; border: 1px solid #cbd5e1; border-radius: 8px; padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.decline-pay:hover { background: #f9fafb; }
+.decline-pay:disabled { opacity: .6; cursor: default; }
 #order-confirmation { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; border-radius: 8px; padding: 16px; margin-top: 16px; font-weight: 600; }
 
 /* drip pricing fee lines */

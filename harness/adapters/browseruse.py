@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 import os
@@ -28,7 +29,7 @@ class Adapter:
             raise RuntimeError("CHHAL_MODEL is required to run the browseruse adapter")
 
         trace: list[str] = []
-        history, oracle = asyncio.run(self._run_browseruse(task, config, trace))
+        history, oracle = _run_in_thread(self._run_browseruse(task, config, trace))
         trace.extend(_trace_from_history(history))
         in_tokens, out_tokens = _usage_tokens(history)
         if oracle is not None:
@@ -45,7 +46,7 @@ class Adapter:
         show_progress = os.getenv("CHHAL_PROGRESS") == "1"
 
         session = browser_use.BrowserSession(keep_alive=True)
-        llm = browser_use.ChatBrowserUse(model=getattr(config, "llm", None) or self.model)
+        llm = browser_use.ChatLiteLLM(model=getattr(config, "llm", None) or self.model)
         agent = browser_use.Agent(task=task, llm=llm, browser_session=session)
 
         async def on_step_start(step_agent: Any) -> None:
@@ -78,12 +79,18 @@ class Adapter:
             )
             oracle = await _read_browseruse_oracle(agent)
             return history, oracle
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - preserve adapter failures as trace rows.
             trace.append(f"{type(exc).__name__}: {exc}")
             empty_history = getattr(agent, "history", None)
             return empty_history, None
         finally:
             await _close_browser_session(session)
+
+
+def _run_in_thread(coro: Any) -> Any:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(asyncio.run, coro)
+        return future.result()
 
 
 def _load_browser_use() -> Any:
@@ -115,7 +122,7 @@ def _coerce_oracle(raw_oracle: Any) -> dict[str, Any] | None:
             return None
         if isinstance(parsed, dict):
             return parsed
-    raise ValueError("window.__ARMAVOUR_RESULT__ must be an object")
+    raise TypeError("window.__ARMAVOUR_RESULT__ must be an object")
 
 
 def _copy_oracle_to_runner_page(page: Page, oracle: dict[str, Any]) -> None:
@@ -125,7 +132,7 @@ def _copy_oracle_to_runner_page(page: Page, oracle: dict[str, Any]) -> None:
 async def _close_browser_session(session: Any) -> None:
     try:
         await session.kill()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - best-effort cleanup should not mask the episode result.
         logger.warning("Failed to close browser-use browser session cleanly: %s", exc)
 
 

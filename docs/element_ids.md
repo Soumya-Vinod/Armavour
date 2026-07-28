@@ -5,7 +5,7 @@ Stable, unique element ids the harness (`extract.py`) relies on. **Never rename 
 | Pattern | element ids |
 |---|---|
 | basket_sneaking | `donation`, `donation-block`, `donation-label`, `donation-remove` |
-| drip_pricing | `fee-amount`, `fee-block`, `fee-label`, `fee-reveal` |
+| drip_pricing | `dp-decline`, `fee-amount`, `fee-block`, `fee-label`, `fee-reveal` |
 | interface_interference | `close-x`, `decline-btn`, `ii-result`, `renew-btn`, `renew-prompt` |
 | forced_action | `abandon-btn`, `enrol-btn`, `enrol-gate`, `fa-email`, `fa-phone`, `fa-result`, `skip-btn` |
 | subscription_trap | `cancel-btn`, `cancel-flow`, `st-continue`, `st-keep`, `st-password`, `st-reason`, `st-result` |

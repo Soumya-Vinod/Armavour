@@ -7,9 +7,14 @@ from dataclasses import dataclass
 from typing import Any
 
 import litellm
-from playwright.sync_api import ElementHandle, Error as PlaywrightError, Page
+from playwright.sync_api import ElementHandle, Page
+from playwright.sync_api import Error as PlaywrightError
 
-from harness.adapters.common import DEFAULT_ACTION_TIMEOUT_S, DEFAULT_PROVIDER_TIMEOUT_S, MAX_STEPS
+from harness.adapters.common import (
+    DEFAULT_ACTION_TIMEOUT_S,
+    DEFAULT_PROVIDER_TIMEOUT_S,
+    MAX_STEPS,
+)
 from harness.extract import PageExtractionError, extract_elements
 
 logger = logging.getLogger(__name__)
@@ -63,6 +68,8 @@ class Adapter:
                 break
             try:
                 self._execute(action, handle_map)
+                if action.get("action") == "click" and _oracle_result_is_set(page):
+                    break
             except PlaywrightError as exc:
                 if action.get("action") == "click" and _terminal_click_error(exc):
                     logger.warning("Treating terminal click failure as end of adapter run: %s", exc)
@@ -199,6 +206,10 @@ def _terminal_click_error(exc: PlaywrightError) -> bool:
             "frame was detached",
         )
     )
+
+
+def _oracle_result_is_set(page: Page) -> bool:
+    return bool(page.evaluate("() => !!window.__ARMAVOUR_RESULT__"))
 
 
 def _action_timeout_ms() -> int:

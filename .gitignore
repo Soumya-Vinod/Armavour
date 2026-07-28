@@ -6,3 +6,4 @@ node_modules/
 Thumbs.db
 data/*
 !data/.gitkeep
+debug.log

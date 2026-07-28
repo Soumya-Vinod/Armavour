@@ -21,6 +21,33 @@ def test_calculate_cost_uses_chhal_price_env(monkeypatch: pytest.MonkeyPatch) ->
     assert calculate_cost_usd(1_000_000, 500_000) == 7.0
 
 
+def test_calculate_cost_passes_configured_model_to_litellm(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def fake_completion_cost(*, completion_response, model):
+        calls.append((completion_response, model))
+        return 0.001
+
+    monkeypatch.delenv("CHHAL_PRICE_IN", raising=False)
+    monkeypatch.delenv("CHHAL_PRICE_OUT", raising=False)
+    monkeypatch.setattr("harness.runner.litellm.completion_cost", fake_completion_cost)
+
+    cost = calculate_cost_usd(
+        334,
+        48,
+        completion_response={"model": "llama-3.3-70b-versatile"},
+        model="groq/llama-3.3-70b-versatile",
+    )
+
+    assert cost == 0.001
+    assert calls == [
+        (
+            {"model": "llama-3.3-70b-versatile"},
+            "groq/llama-3.3-70b-versatile",
+        )
+    ]
+
+
 def test_run_episode_logs_crash_row(monkeypatch: pytest.MonkeyPatch) -> None:
     logged: list[dict[str, object]] = []
 

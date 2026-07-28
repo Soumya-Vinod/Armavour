@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 import logging
 import os
+import random
+import time
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from contextlib import contextmanager
 from typing import Any
 from urllib.parse import urlencode
 
 import litellm
 from dotenv import load_dotenv
+from litellm.exceptions import RateLimitError
 
 from harness.config import EpisodeConfig, demo_configs, load_task_prompt
 from harness.evaluator import EvaluationResult, evaluate
@@ -21,6 +24,25 @@ DEFAULT_PRICE_IN = 3.00
 DEFAULT_PRICE_OUT = 15.00
 DEFAULT_MAX_STEPS = 20
 DEFAULT_DEMO_MAX_STEPS = 6
+DEFAULT_GROQ_DELAY_S = 8
+DEFAULT_GROQ_DELAY_S_BROWSERUSE = 25
+DEFAULT_RATE_LIMIT_RETRIES = 3
+RATE_LIMIT_BACKOFF_BASE_S = 30
+RATE_LIMIT_BACKOFF_JITTER_S = 5
+PRECHECK_PATTERN_TASKS = (
+    ("false_urgency", "fu_best"),
+    ("basket_sneaking", "bs_ticket"),
+    ("confirm_shaming", "cs_donation"),
+    ("forced_action", "fa_course"),
+    ("subscription_trap", "st_cancel"),
+    ("interface_interference", "ii_renew"),
+    ("bait_and_switch", "bns_item"),
+    ("drip_pricing", "dp_ticket"),
+    ("disguised_advertisement", "da_cheapest"),
+    ("nagging", "nag_task"),
+    ("trick_question", "tq_prefs"),
+    ("saas_billing", "sb_free"),
+)
 logger = logging.getLogger(__name__)
 load_dotenv()
 
@@ -74,6 +96,7 @@ def calculate_cost_usd(
     in_tokens: int,
     out_tokens: int,
     completion_response: Any | Iterable[Any] | None = None,
+    model: str | None = None,
 ) -> float:
     if "CHHAL_PRICE_IN" in os.environ or "CHHAL_PRICE_OUT" in os.environ:
         price_in = float(os.getenv("CHHAL_PRICE_IN", str(DEFAULT_PRICE_IN)))
@@ -86,8 +109,11 @@ def calculate_cost_usd(
         return 0.0
 
     try:
-        return sum(float(litellm.completion_cost(completion_response=response)) for response in responses)
-    except Exception as exc:
+        return sum(
+            float(litellm.completion_cost(completion_response=response, model=model))
+            for response in responses
+        )
+    except Exception as exc:  # noqa: BLE001 - pricing lookup failures must not fail an episode.
         logger.warning("LiteLLM cost lookup failed; defaulting cost_usd to 0.0: %s", exc)
         return 0.0
 
@@ -108,14 +134,19 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                 page = browser.new_page()
                 page.set_default_timeout(timeout_ms)
                 page.goto(build_episode_url(config), wait_until="networkidle", timeout=timeout_ms)
-                trace, in_tokens, out_tokens = adapter.run(page, task_prompt, config)
+                trace, in_tokens, out_tokens = _run_adapter_with_rate_limit_retry(
+                    adapter,
+                    page,
+                    task_prompt,
+                    config,
+                )
                 completion_responses = getattr(adapter, "completion_responses", None)
                 evaluation = evaluate(page, config.pattern, trace)
             finally:
                 browser.close()
 
         row = _success_row(row_base, evaluation, trace, in_tokens, out_tokens, completion_responses)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - record harness failures as crash rows.
         row = _crash_row(row_base, trace, in_tokens, out_tokens, exc)
 
     if log:
@@ -142,9 +173,78 @@ def run_batch(
     *,
     run_id: str | None = None,
     log: bool = True,
+    on_episode_start: Callable[[int, EpisodeConfig], None] | None = None,
+    on_episode_end: Callable[[int, EpisodeConfig, dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     batch_run_id = run_id or f"run-{uuid.uuid4().hex}"
-    return [run_episode(config, run_id=batch_run_id, log=log) for config in configs]
+    rows = []
+    try:
+        for index, config in enumerate(configs, start=1):
+            if index > 1:
+                delay_s = _groq_rate_limit_delay_s(config)
+                if delay_s > 0:
+                    print(
+                        {"event": "rate_limit_delay", "seconds": delay_s, "reason": "groq_tpm"},
+                        flush=True,
+                    )
+                    time.sleep(delay_s)
+            if on_episode_start is not None:
+                on_episode_start(index, config)
+            row = run_episode(config, run_id=batch_run_id, log=log)
+            rows.append(row)
+            if on_episode_end is not None:
+                on_episode_end(index, config, row)
+    except KeyboardInterrupt:
+        print({"event": "batch_interrupted", "run_id": batch_run_id}, flush=True)
+        raise
+    return rows
+
+
+def _groq_rate_limit_delay_s(config: EpisodeConfig) -> float:
+    if not config.llm.startswith("groq/"):
+        return 0.0
+    if config.agent == "computeruse":
+        return float(os.getenv("CHHAL_GROQ_DELAY_S", str(DEFAULT_GROQ_DELAY_S)))
+    if config.agent == "browseruse":
+        return float(os.getenv("CHHAL_GROQ_DELAY_S_BROWSERUSE", str(DEFAULT_GROQ_DELAY_S_BROWSERUSE)))
+    return 0.0
+
+
+def _run_adapter_with_rate_limit_retry(
+    adapter: Any,
+    page: Any,
+    task_prompt: str,
+    config: EpisodeConfig,
+) -> tuple[list[Any], int, int]:
+    max_retries = int(os.getenv("CHHAL_RATE_LIMIT_RETRIES", str(DEFAULT_RATE_LIMIT_RETRIES)))
+    attempt = 0
+    while True:
+        try:
+            return adapter.run(page, task_prompt, config)
+        except Exception as exc:
+            if not _is_rate_limit_error(exc) or attempt >= max_retries:
+                raise
+            attempt += 1
+            wait_s = _rate_limit_backoff_s(attempt)
+            print(
+                {
+                    "event": "rate_limit_retry",
+                    "attempt": attempt,
+                    "wait_seconds": wait_s,
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+                flush=True,
+            )
+            time.sleep(wait_s)
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    return isinstance(exc, RateLimitError) or "RateLimitError" in type(exc).__name__ or "RateLimitError" in str(exc)
+
+
+def _rate_limit_backoff_s(attempt: int) -> float:
+    backoff_s = RATE_LIMIT_BACKOFF_BASE_S * (2 ** (attempt - 1))
+    return max(0.0, backoff_s + random.uniform(-RATE_LIMIT_BACKOFF_JITTER_S, RATE_LIMIT_BACKOFF_JITTER_S))
 
 
 def _base_row(config: EpisodeConfig, run_id: str) -> dict[str, Any]:
@@ -176,7 +276,7 @@ def _success_row(
         "outcome": evaluation.outcome,
         "in_tokens": in_tokens,
         "out_tokens": out_tokens,
-        "cost_usd": calculate_cost_usd(in_tokens, out_tokens, completion_response),
+        "cost_usd": calculate_cost_usd(in_tokens, out_tokens, completion_response, model=str(base["llm"])),
         "steps": len(trace),
         "judge_flag": evaluation.judge_flag,
         "judge_evidence": evaluation.judge_evidence,
@@ -246,12 +346,82 @@ def demo() -> None:
         print({key: row[key] for key in ("config_hash", "pattern", "outcome", "cost_usd")})
 
 
+def precheck_configs() -> list[EpisodeConfig]:
+    return [
+        EpisodeConfig(
+            site="ticketing",
+            task_id=task_id,
+            pattern=pattern,
+            intensity="moderate",
+            language="en",
+            agent="computeruse",
+            llm=os.getenv("CHHAL_MODEL", "anthropic/claude-sonnet-4-6"),
+            seed=0,
+        )
+        for pattern, task_id in PRECHECK_PATTERN_TASKS
+    ]
+
+
+def precheck() -> None:
+    configs = precheck_configs()
+    run_id = f"precheck-{uuid.uuid4().hex}"
+
+    def print_episode_start(index: int, config: EpisodeConfig) -> None:
+        print(
+            {
+                "event": "precheck_episode_start",
+                "index": index,
+                "total": len(configs),
+                "pattern": config.pattern,
+            },
+            flush=True,
+        )
+
+    def print_episode_summary(index: int, config: EpisodeConfig, row: dict[str, Any]) -> None:
+        print(
+            {
+                "event": "precheck_episode_end",
+                "index": index,
+                "total": len(configs),
+                "pattern": config.pattern,
+                "outcome": row["outcome"],
+                "steps": row["steps"],
+                "cost_usd": row["cost_usd"],
+                "crash_row_written": row["outcome"] is None,
+            },
+            flush=True,
+        )
+
+    rows = run_batch(
+        configs,
+        run_id=run_id,
+        log=True,
+        on_episode_start=print_episode_start,
+        on_episode_end=print_episode_summary,
+    )
+    clean = sum(1 for row in rows if row["outcome"] is not None)
+    crashed = len(rows) - clean
+    print(
+        {
+            "event": "precheck_summary",
+            "patterns": len(rows),
+            "completed_cleanly": clean,
+            "crashed": crashed,
+            "passed": crashed == 0,
+        },
+        flush=True,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Armavour harness episodes.")
     parser.add_argument("--demo", action="store_true", help="Run a small demo batch.")
+    parser.add_argument("--precheck", action="store_true", help="Run one moderate computeruse episode per pattern.")
     args = parser.parse_args()
     if args.demo:
         demo()
+    elif args.precheck:
+        precheck()
     else:
         parser.print_help()
 

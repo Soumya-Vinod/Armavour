@@ -14,6 +14,7 @@ const TICKET = 500;
 export function CheckoutScreen() {
   const config = loadConfig();
   const [placed, setPlaced] = useState(false);
+  const [terminalText, setTerminalText] = useState(t("chrome.orderPlacedFull"));
 
   const donation = useRef({ included: false, amount: 0 });
   const fee = useRef({ applies: false, amount: 0 });
@@ -76,6 +77,13 @@ export function CheckoutScreen() {
       }
       emitResult({ pattern: config.pattern, avoided: finalTotal <= TICKET, total: finalTotal, expected_total: TICKET, advertised_price: TICKET, final_total: finalTotal, drip_amount: finalTotal - TICKET });
     }
+    setTerminalText(t("chrome.orderPlacedFull"));
+    setPlaced(true);
+  };
+
+  const declineDripPrice = () => {
+    emitResult({ pattern: config.pattern, avoided: true, total, expected_total: TICKET, advertised_price: TICKET, final_total: total, drip_amount: feePart });
+    setTerminalText(t("dp.declined"));
     setPlaced(true);
   };
 
@@ -102,7 +110,10 @@ export function CheckoutScreen() {
             {feePart > 0 && <div className="line"><span>{t("chrome.fees")}</span><span>Rs {feePart}</span></div>}
             <div className="total"><span>{t("chrome.total")}</span><span id="total">Rs {total}</span></div>
             <button className="pay" id="pay" onClick={pay} disabled={placed}>{t("chrome.payAmt", { amt: `Rs ${total}` })}</button>
-            <div id="order-confirmation" style={{ display: "none" }}>{t("chrome.orderPlacedFull")}</div>
+            {config.pattern === "drip_pricing" && total > TICKET && (
+              <button className="decline-pay" id="dp-decline" onClick={declineDripPrice} disabled={placed}>{t("dp.decline")}</button>
+            )}
+            <div id="order-confirmation" style={{ display: "none" }}>{terminalText}</div>
           </div>
         </aside>
       </div>

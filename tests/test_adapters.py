@@ -100,12 +100,12 @@ def fake_browser_use_module() -> SimpleNamespace:
         async def kill(self) -> None:
             self.killed = True
 
-    class FakeChatBrowserUse:
+    class FakeChatLiteLLM:
         def __init__(self, *, model: str) -> None:
             self.model = model
 
     class FakeAgent:
-        def __init__(self, *, task: str, llm: FakeChatBrowserUse, browser_session: FakeBrowserSession) -> None:
+        def __init__(self, *, task: str, llm: FakeChatLiteLLM, browser_session: FakeBrowserSession) -> None:
             self.task = task
             self.llm = llm
             self.browser_session = browser_session
@@ -121,7 +121,7 @@ def fake_browser_use_module() -> SimpleNamespace:
     return SimpleNamespace(
         Agent=FakeAgent,
         BrowserSession=FakeBrowserSession,
-        ChatBrowserUse=FakeChatBrowserUse,
+        ChatLiteLLM=FakeChatLiteLLM,
     )
 
 

@@ -5,10 +5,10 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
 from itertools import product
 from pathlib import Path
-from typing import Iterable, Sequence
 
 VALID_INTENSITIES = {"subtle", "moderate", "aggressive", "control"}
 TASKS_PATH = Path(__file__).resolve().parent.parent / "docs" / "specs" / "tasks.md"

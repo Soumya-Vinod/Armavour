@@ -77,7 +77,7 @@ def read_oracle_result(page: Page) -> dict[str, Any] | None:
     if result is None:
         return None
     if not isinstance(result, dict):
-        raise ValueError("window.__ARMAVOUR_RESULT__ must be an object")
+        raise TypeError("window.__ARMAVOUR_RESULT__ must be an object")
     return result
 
 
