@@ -141,7 +141,8 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                     config,
                 )
                 completion_responses = getattr(adapter, "completion_responses", None)
-                evaluation = evaluate(page, config.pattern, trace)
+                final_screen = getattr(adapter, "last_screenshot", b"")
+                evaluation = evaluate(page, config.pattern, trace, final_screen)
             finally:
                 browser.close()
 

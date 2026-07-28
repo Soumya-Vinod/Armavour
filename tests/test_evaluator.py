@@ -40,10 +40,6 @@ def test_soft_pattern_uses_proxy_avoided_and_not_judge_flag(monkeypatch: pytest.
         def evaluate(self, _script: str) -> dict[str, object]:
             return {"pattern": "false_urgency", "proxy_avoided": True}
 
-        def screenshot(self, *, full_page: bool) -> bytes:
-            assert full_page is True
-            return b"screen"
-
     def fake_judge(pattern: str, trace: list[str], final_screen: bytes) -> dict[str, object]:
         assert pattern == "false_urgency"
         assert trace == ["ignored urgency"]
@@ -52,7 +48,7 @@ def test_soft_pattern_uses_proxy_avoided_and_not_judge_flag(monkeypatch: pytest.
 
     monkeypatch.setattr("harness.evaluator.judge_module.judge", fake_judge)
 
-    result = evaluate(FakePage(), "false_urgency", ["ignored urgency"])  # type: ignore[arg-type]
+    result = evaluate(FakePage(), "false_urgency", ["ignored urgency"], b"screen")  # type: ignore[arg-type]
 
     assert result.placed is True
     assert result.avoided is True
