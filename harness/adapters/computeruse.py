@@ -28,6 +28,7 @@ class Adapter:
     def __post_init__(self) -> None:
         self.model = self.model or os.getenv("CHHAL_MODEL")
         self.completion_responses: list[Any] = []
+        self.last_screenshot: bytes = b""
 
     def run(self, page: Page, task: str, config: Any) -> tuple[list[dict[str, Any]], int, int]:
         if not self.model:
@@ -75,6 +76,14 @@ class Adapter:
                     logger.warning("Treating terminal click failure as end of adapter run: %s", exc)
                     break
                 raise
+
+        # Not part of Contract 5 return signature.
+        # Accessed by evaluator.py via adapter.last_screenshot after run().
+        try:
+            self.last_screenshot = page.screenshot()
+        except Exception as exc:  # noqa: BLE001 - screenshot is best-effort evidence.
+            self.last_screenshot = b""
+            logger.warning("computeruse: screenshot capture failed: %s", exc)
 
         return trace, in_tokens, out_tokens
 

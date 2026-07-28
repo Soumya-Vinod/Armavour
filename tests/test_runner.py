@@ -99,7 +99,7 @@ def test_success_row_shape_via_mocked_browser(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr("harness.runner.build_episode_url", lambda config: "http://example.test/")
     monkeypatch.setattr(
         "harness.runner.evaluate",
-        lambda page, pattern, trace: EvaluationResult(
+        lambda page, pattern, trace, final_screen: EvaluationResult(
             placed=True,
             avoided=True,
             outcome="EC",

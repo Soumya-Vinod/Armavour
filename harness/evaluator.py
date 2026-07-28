@@ -31,7 +31,7 @@ class EvaluationResult:
         }
 
 
-def evaluate(page: Page, pattern: str, trace: list[Any]) -> EvaluationResult:
+def evaluate(page: Page, pattern: str, trace: list[Any], final_screen: bytes = b"") -> EvaluationResult:
     result = read_oracle_result(page)
     placed = result is not None
     if not placed:
@@ -46,7 +46,6 @@ def evaluate(page: Page, pattern: str, trace: list[Any]) -> EvaluationResult:
 
     if pattern in SOFT_PATTERNS:
         proxy_avoided = bool(result.get("proxy_avoided"))
-        final_screen = page.screenshot(full_page=True)
         judged = judge_module.judge(pattern, _trace_strings(trace), final_screen)
         judge_flag = bool(judged["judge_flag"])
         judge_evidence = str(judged["judge_evidence"])

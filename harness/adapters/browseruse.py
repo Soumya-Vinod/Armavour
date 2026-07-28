@@ -23,6 +23,7 @@ class Adapter:
     def __post_init__(self) -> None:
         self.model = self.model or os.getenv("CHHAL_MODEL")
         self.completion_responses: list[Any] = []
+        self.last_screenshot: bytes = b""
 
     def run(self, page: Page, task: str, config: Any) -> tuple[list[str], int, int]:
         if not self.model:
@@ -78,6 +79,7 @@ class Adapter:
                 on_step_end=on_step_end,
             )
             oracle = await _read_browseruse_oracle(agent)
+            await self._capture_last_screenshot(agent)
             return history, oracle
         except Exception as exc:  # noqa: BLE001 - preserve adapter failures as trace rows.
             trace.append(f"{type(exc).__name__}: {exc}")
@@ -85,6 +87,16 @@ class Adapter:
             return empty_history, None
         finally:
             await _close_browser_session(session)
+
+    async def _capture_last_screenshot(self, agent: Any) -> None:
+        # Not part of Contract 5 return signature.
+        # Accessed by evaluator.py via adapter.last_screenshot after run().
+        try:
+            internal_page = await agent.browser_session.must_get_current_page()
+            self.last_screenshot = await internal_page.screenshot()
+        except Exception as exc:  # noqa: BLE001 - screenshot is best-effort evidence.
+            self.last_screenshot = b""
+            logger.warning("browseruse: screenshot capture failed: %s", exc)
 
 
 def _run_in_thread(coro: Any) -> Any:

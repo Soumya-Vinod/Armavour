@@ -130,6 +130,9 @@ class FakeInternalPage:
         assert page_function == "() => window.__ARMAVOUR_RESULT__"
         return '{"avoided": true}'
 
+    async def screenshot(self) -> bytes:
+        return b"screen"
+
 
 class FakeHistory:
     usage = SimpleNamespace(total_prompt_tokens=11, total_completion_tokens=7)
