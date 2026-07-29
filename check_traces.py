@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, text
-import os, json
+import os
 
 engine = create_engine(os.environ["DATABASE_URL"])
 with engine.connect() as conn:
