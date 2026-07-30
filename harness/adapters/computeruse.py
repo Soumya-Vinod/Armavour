@@ -97,7 +97,7 @@ class Adapter:
         prompt = {
             "task": task,
             "config": _jsonable(config),
-            "elements": elements,
+            "elements": _elements_for_prompt(elements),
             "previous_steps": trace,
             "instructions": (
                 "Choose exactly one next action. Return only JSON with keys: "
@@ -193,6 +193,16 @@ def _jsonable(value: Any) -> Any:
     if hasattr(value, "__dict__"):
         return value.__dict__
     return value
+
+
+def _elements_for_prompt(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    prompt_elements: list[dict[str, Any]] = []
+    for element in elements:
+        prompt_element = dict(element)
+        if not prompt_element.get("context_text"):
+            prompt_element.pop("context_text", None)
+        prompt_elements.append(prompt_element)
+    return prompt_elements
 
 
 def _last_action_was_click(trace: list[dict[str, Any]]) -> bool:

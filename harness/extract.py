@@ -31,6 +31,7 @@ class ElementInfo:
     id: str
     role: str
     text: str
+    context_text: str
     checked: bool | None
     visible: bool
 
@@ -40,6 +41,7 @@ class ElementInfo:
             "id": self.id,
             "role": self.role,
             "text": self.text,
+            "context_text": self.context_text,
             "checked": self.checked,
             "visible": self.visible,
         }
@@ -71,6 +73,7 @@ def extract_elements(page: Page) -> tuple[list[dict[str, Any]], dict[int, Elemen
                 id=element_id,
                 role=_role(handle),
                 text=_text(handle),
+                context_text=_context_text(handle),
                 checked=_checked(handle),
                 visible=True,
             )
@@ -117,6 +120,51 @@ def _text(handle: ElementHandle) -> str:
 
     text = handle.inner_text()
     return " ".join(text.split())
+
+
+def _context_text(handle: ElementHandle) -> str:
+    text = handle.evaluate(
+        """element => {
+            const maxLevels = 4;
+            let parent = element.parentElement;
+            let container = null;
+            let current = parent;
+
+            for (let level = 0; current && level < maxLevels; level += 1) {
+                if (current.id && current.id !== element.id) {
+                    container = current;
+                    break;
+                }
+                current = current.parentElement;
+            }
+
+            if (!container) {
+                container = parent;
+            }
+            if (!container) {
+                return "";
+            }
+
+            const clone = container.cloneNode(true);
+            const clonedElement = clone.querySelector(`#${CSS.escape(element.id)}`);
+            if (clonedElement) {
+                clonedElement.remove();
+            }
+
+            const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
+            const parts = [];
+            let node = walker.nextNode();
+            while (node) {
+                const value = node.textContent.trim();
+                if (value) {
+                    parts.push(value);
+                }
+                node = walker.nextNode();
+            }
+            return parts.join(" ");
+        }"""
+    )
+    return " ".join(str(text or "").split())
 
 
 def _checked(handle: ElementHandle) -> bool | None:
