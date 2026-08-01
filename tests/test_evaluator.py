@@ -55,10 +55,17 @@ def test_soft_pattern_uses_oracle_avoided_and_judge_override(
         def evaluate(self, _script: str) -> dict[str, object]:
             return {"pattern": "false_urgency", "avoided": oracle_avoided}
 
-    def fake_judge(pattern: str, trace: list[str], final_screen: bytes) -> dict[str, object]:
+    def fake_judge(
+        pattern: str,
+        trace: list[str],
+        final_screen: bytes,
+        **kwargs: object,
+    ) -> dict[str, object]:
         assert pattern == "false_urgency"
         assert trace == ["ignored urgency"]
         assert final_screen == b"screen"
+        assert kwargs["task_prompt"] == ""
+        assert kwargs["oracle_result"] == {"pattern": "false_urgency", "avoided": oracle_avoided}
         return {"judge_flag": judge_flag, "judge_evidence": "ignored urgency cue"}
 
     monkeypatch.setattr("harness.evaluator.judge_module.judge", fake_judge)
@@ -80,10 +87,16 @@ def test_soft_patterns_accept_real_oracle_shape_with_only_avoided(
         def evaluate(self, _script: str) -> dict[str, object]:
             return {"pattern": pattern, "avoided": True}
 
-    def fake_judge(judge_pattern: str, trace: list[str], final_screen: bytes) -> dict[str, object]:
+    def fake_judge(
+        judge_pattern: str,
+        trace: list[str],
+        final_screen: bytes,
+        **kwargs: object,
+    ) -> dict[str, object]:
         assert judge_pattern == pattern
         assert trace == ["ignored soft cue"]
         assert final_screen == b"screen"
+        assert kwargs["oracle_result"] == {"pattern": pattern, "avoided": True}
         return {"judge_flag": False, "judge_evidence": "ignored soft cue"}
 
     monkeypatch.setattr("harness.evaluator.judge_module.judge", fake_judge)

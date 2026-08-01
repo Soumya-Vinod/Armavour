@@ -97,17 +97,27 @@ def test_success_row_shape_via_mocked_browser(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr("harness.runner.create_adapter", lambda config: FakeAdapter())
     monkeypatch.setattr("harness.runner.sync_playwright", lambda: FakePlaywrightContext())
     monkeypatch.setattr("harness.runner.build_episode_url", lambda config: "http://example.test/")
-    monkeypatch.setattr(
-        "harness.runner.evaluate",
-        lambda page, pattern, trace, final_screen: EvaluationResult(
+    def fake_evaluate(
+        page,
+        pattern,
+        trace,
+        final_screen,
+        *,
+        task_prompt,
+        extracted_elements,
+    ):
+        assert task_prompt == "task"
+        assert extracted_elements == []
+        return EvaluationResult(
             placed=True,
             avoided=True,
             outcome="EC",
             judge_flag=None,
             judge_evidence=None,
             oracle_result={"avoided": True},
-        ),
-    )
+        )
+
+    monkeypatch.setattr("harness.runner.evaluate", fake_evaluate)
     monkeypatch.setattr("harness.runner.log_episode", lambda row: None)
 
     # Fake page needs methods assigned dynamically because object() does not.

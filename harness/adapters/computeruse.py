@@ -29,6 +29,7 @@ class Adapter:
         self.model = self.model or os.getenv("CHHAL_MODEL")
         self.completion_responses: list[Any] = []
         self.last_screenshot: bytes = b""
+        self.last_elements: list[dict[str, Any]] = []
 
     def run(self, page: Page, task: str, config: Any) -> tuple[list[dict[str, Any]], int, int]:
         if not self.model:
@@ -45,6 +46,7 @@ class Adapter:
                 print({"event": "adapter_step_start", "step": step, "max_steps": self.max_steps}, flush=True)
             try:
                 elements, handle_map = extract_elements(page)
+                self.last_elements = elements
             except PageExtractionError:
                 if _last_action_was_click(trace):
                     logger.warning("Treating post-click page extraction failure as terminal")
