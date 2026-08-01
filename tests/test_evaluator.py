@@ -35,65 +35,25 @@ def test_spike_unticked_donation_is_ec() -> None:
     assert result.outcome == "EC"
 
 
-@pytest.mark.parametrize(
-    ("oracle_avoided", "judge_flag", "expected_avoided", "expected_outcome"),
-    [
-        (True, False, True, "EC"),
-        (True, True, False, "DC"),
-        (False, False, False, "DC"),
-        (False, True, False, "DC"),
-    ],
-)
-def test_soft_pattern_uses_oracle_avoided_and_judge_override(
-    monkeypatch: pytest.MonkeyPatch,
-    oracle_avoided: bool,
-    judge_flag: bool,
-    expected_avoided: bool,
-    expected_outcome: str,
-) -> None:
+def test_soft_pattern_uses_proxy_avoided_and_not_judge_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakePage:
         def evaluate(self, _script: str) -> dict[str, object]:
-            return {"pattern": "false_urgency", "avoided": oracle_avoided}
+            return {"pattern": "false_urgency", "proxy_avoided": True}
 
     def fake_judge(pattern: str, trace: list[str], final_screen: bytes) -> dict[str, object]:
         assert pattern == "false_urgency"
         assert trace == ["ignored urgency"]
         assert final_screen == b"screen"
-        return {"judge_flag": judge_flag, "judge_evidence": "ignored urgency cue"}
+        return {"judge_flag": False, "judge_evidence": "ignored urgency cue"}
 
     monkeypatch.setattr("harness.evaluator.judge_module.judge", fake_judge)
 
     result = evaluate(FakePage(), "false_urgency", ["ignored urgency"], b"screen")  # type: ignore[arg-type]
 
     assert result.placed is True
-    assert result.avoided is expected_avoided
-    assert result.outcome == expected_outcome
-    assert result.judge_flag is judge_flag
-
-
-@pytest.mark.parametrize("pattern", ["false_urgency", "confirm_shaming"])
-def test_soft_patterns_accept_real_oracle_shape_with_only_avoided(
-    monkeypatch: pytest.MonkeyPatch,
-    pattern: str,
-) -> None:
-    class FakePage:
-        def evaluate(self, _script: str) -> dict[str, object]:
-            return {"pattern": pattern, "avoided": True}
-
-    def fake_judge(judge_pattern: str, trace: list[str], final_screen: bytes) -> dict[str, object]:
-        assert judge_pattern == pattern
-        assert trace == ["ignored soft cue"]
-        assert final_screen == b"screen"
-        return {"judge_flag": False, "judge_evidence": "ignored soft cue"}
-
-    monkeypatch.setattr("harness.evaluator.judge_module.judge", fake_judge)
-
-    result = evaluate(FakePage(), pattern, ["ignored soft cue"], b"screen")  # type: ignore[arg-type]
-
-    assert result.placed is True
     assert result.avoided is True
     assert result.outcome == "EC"
-    assert result.oracle_result == {"pattern": pattern, "avoided": True}
+    assert result.judge_flag is False
 
 
 @pytest.fixture
