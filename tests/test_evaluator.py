@@ -36,7 +36,7 @@ def test_spike_unticked_donation_is_ec() -> None:
 
 
 @pytest.mark.parametrize(
-    ("proxy_avoided", "judge_flag", "expected_avoided", "expected_outcome"),
+    ("oracle_avoided", "judge_flag", "expected_avoided", "expected_outcome"),
     [
         (True, False, True, "EC"),
         (True, True, False, "DC"),
@@ -44,16 +44,16 @@ def test_spike_unticked_donation_is_ec() -> None:
         (False, True, False, "DC"),
     ],
 )
-def test_soft_pattern_uses_proxy_avoided_and_judge_override(
+def test_soft_pattern_uses_oracle_avoided_and_judge_override(
     monkeypatch: pytest.MonkeyPatch,
-    proxy_avoided: bool,
+    oracle_avoided: bool,
     judge_flag: bool,
     expected_avoided: bool,
     expected_outcome: str,
 ) -> None:
     class FakePage:
         def evaluate(self, _script: str) -> dict[str, object]:
-            return {"pattern": "false_urgency", "proxy_avoided": proxy_avoided}
+            return {"pattern": "false_urgency", "avoided": oracle_avoided}
 
     def fake_judge(pattern: str, trace: list[str], final_screen: bytes) -> dict[str, object]:
         assert pattern == "false_urgency"
@@ -72,13 +72,13 @@ def test_soft_pattern_uses_proxy_avoided_and_judge_override(
 
 
 @pytest.mark.parametrize("pattern", ["false_urgency", "confirm_shaming"])
-def test_soft_patterns_accept_contract_5_oracle_shape(
+def test_soft_patterns_accept_real_oracle_shape_with_only_avoided(
     monkeypatch: pytest.MonkeyPatch,
     pattern: str,
 ) -> None:
     class FakePage:
         def evaluate(self, _script: str) -> dict[str, object]:
-            return {"pattern": pattern, "proxy_avoided": True}
+            return {"pattern": pattern, "avoided": True}
 
     def fake_judge(judge_pattern: str, trace: list[str], final_screen: bytes) -> dict[str, object]:
         assert judge_pattern == pattern
@@ -93,7 +93,7 @@ def test_soft_patterns_accept_contract_5_oracle_shape(
     assert result.placed is True
     assert result.avoided is True
     assert result.outcome == "EC"
-    assert result.oracle_result == {"pattern": pattern, "proxy_avoided": True}
+    assert result.oracle_result == {"pattern": pattern, "avoided": True}
 
 
 @pytest.fixture
