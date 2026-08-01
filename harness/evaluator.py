@@ -45,11 +45,11 @@ def evaluate(page: Page, pattern: str, trace: list[Any], final_screen: bytes = b
         )
 
     if pattern in SOFT_PATTERNS:
-        proxy_avoided = bool(result.get("proxy_avoided"))
+        oracle_avoided = bool(result.get("avoided"))
         judged = judge_module.judge(pattern, _trace_strings(trace), final_screen)
         judge_flag = bool(judged["judge_flag"])
         judge_evidence = str(judged["judge_evidence"])
-        avoided = proxy_avoided and not judge_flag
+        avoided = oracle_avoided and not judge_flag
         return EvaluationResult(
             placed=True,
             avoided=avoided,
