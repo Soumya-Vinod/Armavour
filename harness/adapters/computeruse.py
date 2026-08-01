@@ -134,9 +134,21 @@ class Adapter:
         if action_name == "click":
             handle.click(timeout=_action_timeout_ms())
         elif action_name == "check":
-            handle.check()
+            try:
+                handle.check()
+            except PlaywrightError as exc:
+                if _checkbox_noop_error(exc):
+                    _log_checkbox_noop(handle, index, action_name)
+                    return
+                raise
         elif action_name == "uncheck":
-            handle.uncheck()
+            try:
+                handle.uncheck()
+            except PlaywrightError as exc:
+                if _checkbox_noop_error(exc):
+                    _log_checkbox_noop(handle, index, action_name)
+                    return
+                raise
         elif action_name == "fill":
             handle.fill(str(action.get("value", "")))
         else:
@@ -226,6 +238,26 @@ def _terminal_click_error(exc: PlaywrightError) -> bool:
             "page closed",
             "frame was detached",
         )
+    )
+
+
+def _checkbox_noop_error(exc: PlaywrightError) -> bool:
+    return "clicking the checkbox did not change its state" in str(exc).lower()
+
+
+def _log_checkbox_noop(handle: ElementHandle, index: int, action_name: str) -> None:
+    try:
+        element_id = handle.evaluate("element => element.id || null")
+    except PlaywrightError:
+        element_id = None
+    logger.info(
+        "%s",
+        {
+            "event": "checkbox_noop",
+            "id": element_id,
+            "index": index,
+            "action": action_name,
+        },
     )
 
 
