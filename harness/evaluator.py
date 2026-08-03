@@ -124,6 +124,7 @@ def _trace_strings(trace: list[Any]) -> list[str]:
     return strings
 
 
+
 def _format_action(action: Any) -> str:
     if not isinstance(action, dict):
         return str(action)
