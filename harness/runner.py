@@ -142,7 +142,15 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                 )
                 completion_responses = getattr(adapter, "completion_responses", None)
                 final_screen = getattr(adapter, "last_screenshot", b"")
-                evaluation = evaluate(page, config.pattern, trace, final_screen)
+                extracted_elements = getattr(adapter, "last_elements", [])
+                evaluation = evaluate(
+                    page,
+                    config.pattern,
+                    trace,
+                    final_screen,
+                    task_prompt=task_prompt,
+                    extracted_elements=extracted_elements,
+                )
             finally:
                 browser.close()
 

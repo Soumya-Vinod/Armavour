@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import builtins
 import importlib
+import logging
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from playwright.sync_api import sync_playwright
 
-from harness.adapters import agente, browseruse
+from harness.adapters import agente, browseruse, computeruse
 
 
 def test_browseruse_missing_dependency_raises_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,6 +73,94 @@ def test_agente_adapter_has_standard_run_signature() -> None:
     adapter = agente.Adapter(model="model")
 
     assert callable(adapter.run)
+
+
+def test_computeruse_readonly_checkbox_noop_continues_step_loop(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    html = """
+    <label>
+      <input id="locked-box" type="checkbox" checked readonly />
+      Locked decoy
+    </label>
+    <button id="continue" onclick="window.continued = true">Continue</button>
+    <script>
+      document.querySelector("#locked-box").addEventListener("click", event => event.preventDefault());
+    </script>
+    """
+    actions = [
+        {"reasoning": "try locked checkbox", "action": "uncheck", "target_id": "locked-box"},
+        {"reasoning": "continue after noop", "action": "click", "target_id": "continue"},
+        {"reasoning": "finished", "action": "done", "index": 0},
+    ]
+
+    def fake_next_action(
+        _self: computeruse.Adapter,
+        _task: str,
+        _config: Any,
+        elements: list[dict[str, Any]],
+        _trace: list[dict[str, Any]],
+    ) -> tuple[dict[str, Any], dict[str, int]]:
+        action = actions.pop(0)
+        if action["action"] != "done":
+            target_index = next(element["index"] for element in elements if element["id"] == action["target_id"])
+            action = {**action, "index": target_index}
+            action.pop("target_id")
+        return action, {"in_tokens": 1, "out_tokens": 1}
+
+    monkeypatch.setattr(computeruse.Adapter, "_next_action", fake_next_action)
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page()
+        page.set_content(html)
+        adapter = computeruse.Adapter(model="model", max_steps=3)
+
+        with caplog.at_level(logging.INFO, logger="harness.adapters.computeruse"):
+            trace, in_tokens, out_tokens = adapter.run(page, "task", config())
+
+        locked_checked = page.is_checked("#locked-box")
+        continued = page.evaluate("() => window.continued === true")
+        browser.close()
+
+    assert locked_checked is True
+    assert continued is True
+    assert [step["action"]["action"] for step in trace] == ["uncheck", "click", "done"]
+    assert (in_tokens, out_tokens) == (3, 3)
+    assert any(
+        "'event': 'checkbox_noop'" in record.message
+        and "'id': 'locked-box'" in record.message
+        and "'action': 'uncheck'" in record.message
+        for record in caplog.records
+    )
+
+
+def test_computeruse_normal_checked_checkbox_uncheck_still_toggles(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    html = """
+    <label>
+      <input id="normal-box" type="checkbox" checked />
+      Normal checkbox
+    </label>
+    """
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page()
+        page.set_content(html)
+        handle = page.query_selector("#normal-box")
+        assert handle is not None
+
+        with caplog.at_level(logging.INFO, logger="harness.adapters.computeruse"):
+            computeruse.Adapter(model="model")._execute({"action": "uncheck", "index": 0}, {0: handle})
+
+        normal_checked = page.is_checked("#normal-box")
+        browser.close()
+
+    assert normal_checked is False
+    assert not any("'event': 'checkbox_noop'" in record.message for record in caplog.records)
 
 
 def config() -> SimpleNamespace:

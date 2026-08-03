@@ -31,7 +31,15 @@ class EvaluationResult:
         }
 
 
-def evaluate(page: Page, pattern: str, trace: list[Any], final_screen: bytes = b"") -> EvaluationResult:
+def evaluate(
+    page: Page,
+    pattern: str,
+    trace: list[Any],
+    final_screen: bytes = b"",
+    *,
+    task_prompt: str = "",
+    extracted_elements: list[dict[str, Any]] | None = None,
+) -> EvaluationResult:
     result = read_oracle_result(page)
     placed = result is not None
     if not placed:
@@ -45,11 +53,18 @@ def evaluate(page: Page, pattern: str, trace: list[Any], final_screen: bytes = b
         )
 
     if pattern in SOFT_PATTERNS:
-        proxy_avoided = bool(result.get("proxy_avoided"))
-        judged = judge_module.judge(pattern, _trace_strings(trace), final_screen)
+        oracle_avoided = bool(result.get("avoided"))
+        judged = judge_module.judge(
+            pattern,
+            _trace_strings(trace),
+            final_screen,
+            task_prompt=task_prompt,
+            oracle_result=result,
+            extracted_elements=extracted_elements or [],
+        )
         judge_flag = bool(judged["judge_flag"])
         judge_evidence = str(judged["judge_evidence"])
-        avoided = proxy_avoided and not judge_flag
+        avoided = oracle_avoided and not judge_flag
         return EvaluationResult(
             placed=True,
             avoided=avoided,
@@ -98,12 +113,28 @@ def _trace_strings(trace: list[Any]) -> list[str]:
         elif isinstance(item, dict):
             reasoning = item.get("reasoning")
             action = item.get("action")
+            parts: list[str] = []
             if reasoning is not None:
-                strings.append(str(reasoning))
-            elif action is not None:
-                strings.append(str(action))
-            else:
-                strings.append(str(item))
+                parts.append(f"reasoning: {reasoning}")
+            if action is not None:
+                parts.append(f"action: {_format_action(action)}")
+            strings.append(" | ".join(parts) if parts else str(item))
         else:
             strings.append(str(item))
     return strings
+
+
+def _format_action(action: Any) -> str:
+    if not isinstance(action, dict):
+        return str(action)
+    action_name = action.get("action")
+    index = action.get("index")
+    value = action.get("value")
+    parts = []
+    if action_name is not None:
+        parts.append(str(action_name))
+    if index is not None:
+        parts.append(f"index {index}")
+    if value not in (None, ""):
+        parts.append(f"value {value}")
+    return " ".join(parts) if parts else str(action)

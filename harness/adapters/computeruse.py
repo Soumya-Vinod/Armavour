@@ -29,6 +29,7 @@ class Adapter:
         self.model = self.model or os.getenv("CHHAL_MODEL")
         self.completion_responses: list[Any] = []
         self.last_screenshot: bytes = b""
+        self.last_elements: list[dict[str, Any]] = []
 
     def run(self, page: Page, task: str, config: Any) -> tuple[list[dict[str, Any]], int, int]:
         if not self.model:
@@ -45,6 +46,7 @@ class Adapter:
                 print({"event": "adapter_step_start", "step": step, "max_steps": self.max_steps}, flush=True)
             try:
                 elements, handle_map = extract_elements(page)
+                self.last_elements = elements
             except PageExtractionError:
                 if _last_action_was_click(trace):
                     logger.warning("Treating post-click page extraction failure as terminal")
@@ -97,7 +99,7 @@ class Adapter:
         prompt = {
             "task": task,
             "config": _jsonable(config),
-            "elements": elements,
+            "elements": _elements_for_prompt(elements),
             "previous_steps": trace,
             "instructions": (
                 "Choose exactly one next action. Return only JSON with keys: "
@@ -132,9 +134,21 @@ class Adapter:
         if action_name == "click":
             handle.click(timeout=_action_timeout_ms())
         elif action_name == "check":
-            handle.check()
+            try:
+                handle.check()
+            except PlaywrightError as exc:
+                if _checkbox_noop_error(exc):
+                    _log_checkbox_noop(handle, index, action_name)
+                    return
+                raise
         elif action_name == "uncheck":
-            handle.uncheck()
+            try:
+                handle.uncheck()
+            except PlaywrightError as exc:
+                if _checkbox_noop_error(exc):
+                    _log_checkbox_noop(handle, index, action_name)
+                    return
+                raise
         elif action_name == "fill":
             handle.fill(str(action.get("value", "")))
         else:
@@ -195,6 +209,16 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+def _elements_for_prompt(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    prompt_elements: list[dict[str, Any]] = []
+    for element in elements:
+        prompt_element = dict(element)
+        if not prompt_element.get("context_text"):
+            prompt_element.pop("context_text", None)
+        prompt_elements.append(prompt_element)
+    return prompt_elements
+
+
 def _last_action_was_click(trace: list[dict[str, Any]]) -> bool:
     if not trace:
         return False
@@ -214,6 +238,26 @@ def _terminal_click_error(exc: PlaywrightError) -> bool:
             "page closed",
             "frame was detached",
         )
+    )
+
+
+def _checkbox_noop_error(exc: PlaywrightError) -> bool:
+    return "clicking the checkbox did not change its state" in str(exc).lower()
+
+
+def _log_checkbox_noop(handle: ElementHandle, index: int, action_name: str) -> None:
+    try:
+        element_id = handle.evaluate("element => element.id || null")
+    except PlaywrightError:
+        element_id = None
+    logger.info(
+        "%s",
+        {
+            "event": "checkbox_noop",
+            "id": element_id,
+            "index": index,
+            "action": action_name,
+        },
     )
 
 
