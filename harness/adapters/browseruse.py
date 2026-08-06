@@ -46,6 +46,7 @@ class Adapter:
         browser_use = _load_browser_use()
         show_progress = os.getenv("CHHAL_PROGRESS") == "1"
 
+        session = browser_use.BrowserSession(keep_alive=True)
         # Deterministic inference settings: temperature=0 enforces greedy sampling.
         # ChatLiteLLM passes temperature=0 to underlying provider completions.
         llm = browser_use.ChatLiteLLM(model=getattr(config, "llm", None) or self.model, temperature=0)

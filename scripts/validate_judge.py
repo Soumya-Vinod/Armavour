@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -10,9 +9,10 @@ from typing import Any
 from dotenv import load_dotenv
 
 sys.path.insert(0, ".")
-load_dotenv()
 
 from harness.judge import JudgeParseError, judge
+
+load_dotenv()
 
 DEFAULT_DATASET_PATH = Path(__file__).resolve().parent.parent / "data" / "judge_validation_samples.json"
 

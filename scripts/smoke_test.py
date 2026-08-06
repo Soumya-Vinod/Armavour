@@ -10,11 +10,12 @@ from dotenv import load_dotenv
 from sqlalchemy import select
 
 sys.path.insert(0, ".")
-load_dotenv()
 
 from harness.config import EpisodeConfig, enumerate_configs
 from harness.logger import engine_from_env, episodes_table
 from harness.runner import run_batch
+
+load_dotenv()
 
 RUN_ID = f"smoke-e2e-{int(time.time())}"
 

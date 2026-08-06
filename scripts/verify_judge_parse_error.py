@@ -9,12 +9,12 @@ from dotenv import load_dotenv
 from sqlalchemy import select
 
 sys.path.insert(0, ".")
-load_dotenv()
 
 from harness.config import EpisodeConfig
-from harness.judge import JudgeParseError
 from harness.logger import engine_from_env, episodes_table
-from harness.runner import run_batch, run_episode
+from harness.runner import run_episode
+
+load_dotenv()
 
 RUN_ID = f"verify-parse-err-{int(time.time())}"
 

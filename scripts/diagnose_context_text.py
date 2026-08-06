@@ -4,9 +4,10 @@ from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, ".")
-load_dotenv()
 
 from harness.extract import extract_elements
+
+load_dotenv()
 
 BASE_URL = (os.getenv("BASE_URL") or "http://localhost:5173").rstrip("/")
 INTENSITIES = ["subtle", "moderate", "aggressive"]
