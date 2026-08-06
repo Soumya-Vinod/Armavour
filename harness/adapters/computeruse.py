@@ -107,8 +107,11 @@ class Adapter:
                 "click, check, uncheck, fill, done."
             ),
         }
+        # Deterministic inference settings: temperature=0 enforces greedy sampling.
+        # Backend provider seed parameters are passed where supported by LiteLLM backends.
         response = litellm.completion(
             model=self.model,
+            temperature=0,
             max_tokens=1000,
             response_format={"type": "json_object"},
             drop_params=True,
