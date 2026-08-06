@@ -47,7 +47,9 @@ class Adapter:
         show_progress = os.getenv("CHHAL_PROGRESS") == "1"
 
         session = browser_use.BrowserSession(keep_alive=True)
-        llm = browser_use.ChatLiteLLM(model=getattr(config, "llm", None) or self.model)
+        # Deterministic inference settings: temperature=0 enforces greedy sampling.
+        # ChatLiteLLM passes temperature=0 to underlying provider completions.
+        llm = browser_use.ChatLiteLLM(model=getattr(config, "llm", None) or self.model, temperature=0)
         agent = browser_use.Agent(task=task, llm=llm, browser_session=session)
 
         async def on_step_start(step_agent: Any) -> None:

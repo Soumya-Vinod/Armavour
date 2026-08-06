@@ -43,6 +43,10 @@ def validate_judge_model(agent_model: str, judge_model: str) -> None:
 PLACEHOLDER_RE = re.compile(r"\{[A-Za-z_][A-Za-z0-9_]*\}")
 
 
+class JudgeParseError(RuntimeError):
+    """Raised when the judge LLM returns an invalid or unparseable response."""
+
+
 def judge(
     pattern: str,
     trace: list[str],
@@ -61,7 +65,7 @@ def judge(
     if not trace:
         raise ValueError("trace is required")
 
-    response = _completion_with_rate_limit_retry(
+    response, judge_latency = _completion_with_rate_limit_retry(
         model=judge_model,
         messages=_messages(
             rubric_text=rubric_text,
@@ -77,13 +81,20 @@ def judge(
     raw = _response_text(response)
     try:
         parsed = json.loads(_strip_code_fence(raw))
+        if not isinstance(parsed, dict) or "judge_flag" not in parsed or "judge_evidence" not in parsed:
+            raise ValueError(f"Judge response missing required keys 'judge_flag' or 'judge_evidence': {raw!r}")
+        if not isinstance(parsed["judge_flag"], bool):
+            raise TypeError(
+                f"judge_flag must be a boolean, got {type(parsed['judge_flag']).__name__}: {parsed['judge_flag']!r}"
+            )
         return {
             "judge_flag": bool(parsed["judge_flag"]),
             "judge_evidence": str(parsed["judge_evidence"]),
+            "judge_latency_seconds": round(judge_latency, 4),
         }
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        logger.warning("judge: failed to parse response: %s; raw=%s", exc, raw)
-        return {"judge_flag": False, "judge_evidence": f"parse_error: {raw}"}
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        logger.error("judge: failed to parse response: %s; raw=%s", exc, raw)
+        raise JudgeParseError(f"Judge response could not be parsed: {exc}; raw response: {raw!r}") from exc
 
 
 def _messages(
@@ -250,18 +261,23 @@ def _supports_vision(model: str) -> bool:
     return "vision" in lowered
 
 
-def _completion_with_rate_limit_retry(*, model: str, messages: list[dict[str, Any]]) -> Any:
+def _completion_with_rate_limit_retry(*, model: str, messages: list[dict[str, Any]]) -> tuple[Any, float]:
     max_retries = int(os.getenv("CHHAL_RATE_LIMIT_RETRIES", str(DEFAULT_RATE_LIMIT_RETRIES)))
     attempt = 0
     while True:
         try:
             _apply_groq_delay(model)
-            return litellm.completion(
+            # Deterministic inference settings: temperature=0 ensures greedy sampling.
+            # Backend provider seed parameter is handled by LiteLLM where supported.
+            t0 = time.time()
+            res = litellm.completion(
                 model=model,
                 messages=messages,
                 max_tokens=512,
                 temperature=0,
             )
+            latency = time.time() - t0
+            return res, latency
         except Exception as exc:
             if not _is_rate_limit_error(exc) or attempt >= max_retries:
                 raise

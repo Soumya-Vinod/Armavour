@@ -19,6 +19,7 @@ class EvaluationResult:
     judge_flag: bool | None
     judge_evidence: str | None
     oracle_result: dict[str, Any] | None
+    judge_latency_seconds: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -28,6 +29,7 @@ class EvaluationResult:
             "judge_flag": self.judge_flag,
             "judge_evidence": self.judge_evidence,
             "oracle_result": self.oracle_result,
+            "judge_latency_seconds": self.judge_latency_seconds,
         }
 
 
@@ -50,6 +52,7 @@ def evaluate(
             judge_flag=None,
             judge_evidence=None,
             oracle_result=None,
+            judge_latency_seconds=0.0,
         )
 
     if pattern in SOFT_PATTERNS:
@@ -62,8 +65,15 @@ def evaluate(
             oracle_result=result,
             extracted_elements=extracted_elements or [],
         )
-        judge_flag = bool(judged["judge_flag"])
-        judge_evidence = str(judged["judge_evidence"])
+        if not isinstance(judged, dict) or "judge_flag" not in judged:
+            raise judge_module.JudgeParseError("Judge result dictionary is malformed or missing 'judge_flag'")
+        raw_flag = judged["judge_flag"]
+        if not isinstance(raw_flag, bool):
+            raise judge_module.JudgeParseError(f"judge_flag must be a boolean, got {raw_flag!r}")
+
+        judge_flag = bool(raw_flag)
+        judge_evidence = str(judged.get("judge_evidence") or "")
+        judge_latency = float(judged.get("judge_latency_seconds") or 0.0)
         avoided = oracle_avoided and not judge_flag
         return EvaluationResult(
             placed=True,
@@ -72,6 +82,7 @@ def evaluate(
             judge_flag=judge_flag,
             judge_evidence=judge_evidence,
             oracle_result=result,
+            judge_latency_seconds=judge_latency,
         )
 
     avoided_raw = result.get("avoided")

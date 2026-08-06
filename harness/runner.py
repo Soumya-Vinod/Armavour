@@ -119,6 +119,7 @@ def calculate_cost_usd(
 
 
 def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict[str, Any]:
+    start_time = time.time()
     timeout_ms = int(float(os.getenv("CHHAL_EPISODE_TIMEOUT_S", str(DEFAULT_TIMEOUT_S))) * 1000)
     row_base = _base_row(config, run_id)
     trace: list[Any] = []
@@ -157,6 +158,11 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
         row = _success_row(row_base, evaluation, trace, in_tokens, out_tokens, completion_responses)
     except Exception as exc:  # noqa: BLE001 - record harness failures as crash rows.
         row = _crash_row(row_base, trace, in_tokens, out_tokens, exc)
+
+    adapter_latency = float(getattr(adapter, "provider_latency_seconds", 0.0)) if "adapter" in locals() else 0.0
+    judge_latency = float(evaluation.judge_latency_seconds) if ("evaluation" in locals() and evaluation) else 0.0
+    row["duration_seconds"] = round(time.time() - start_time, 4)
+    row["provider_latency_seconds"] = round(adapter_latency + judge_latency, 4)
 
     if log:
         try:
