@@ -8,7 +8,7 @@ import random
 import re
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import litellm
 from litellm.exceptions import RateLimitError
@@ -47,6 +47,12 @@ class JudgeParseError(RuntimeError):
     """Raised when the judge LLM returns an invalid or unparseable response."""
 
 
+class JudgeResult(TypedDict):
+    judge_flag: bool
+    judge_evidence: str
+    judge_latency_seconds: float
+
+
 def judge(
     pattern: str,
     trace: list[str],
@@ -55,7 +61,7 @@ def judge(
     task_prompt: str = "",
     oracle_result: dict[str, Any] | None = None,
     extracted_elements: list[dict[str, Any]] | None = None,
-) -> dict[str, bool | str]:
+) -> JudgeResult:
     rubric_text = load_rubric(pattern)
     agent_model = os.getenv("CHHAL_MODEL", "")
     judge_model = os.getenv("CHHAL_JUDGE_MODEL", DEFAULT_JUDGE_MODEL)
