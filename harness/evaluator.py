@@ -62,8 +62,14 @@ def evaluate(
             oracle_result=result,
             extracted_elements=extracted_elements or [],
         )
-        judge_flag = bool(judged["judge_flag"])
-        judge_evidence = str(judged["judge_evidence"])
+        if not isinstance(judged, dict) or "judge_flag" not in judged:
+            raise judge_module.JudgeParseError("Judge result dictionary is malformed or missing 'judge_flag'")
+        raw_flag = judged["judge_flag"]
+        if not isinstance(raw_flag, bool):
+            raise judge_module.JudgeParseError(f"judge_flag must be a boolean, got {raw_flag!r}")
+
+        judge_flag = bool(raw_flag)
+        judge_evidence = str(judged.get("judge_evidence") or "")
         avoided = oracle_avoided and not judge_flag
         return EvaluationResult(
             placed=True,
