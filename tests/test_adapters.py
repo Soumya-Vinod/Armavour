@@ -191,8 +191,9 @@ def fake_browser_use_module() -> SimpleNamespace:
             self.killed = True
 
     class FakeChatLiteLLM:
-        def __init__(self, *, model: str) -> None:
+        def __init__(self, *, model: str, **kwargs: Any) -> None:
             self.model = model
+            self.kwargs = kwargs
 
     class FakeAgent:
         def __init__(self, *, task: str, llm: FakeChatLiteLLM, browser_session: FakeBrowserSession) -> None:
