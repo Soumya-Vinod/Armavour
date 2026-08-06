@@ -178,6 +178,34 @@ def main() -> dict[str, Any]:
 
         print(f"  Episode {i}: pattern={pattern}, intensity={row['intensity']}, outcome={outcome}, steps={row['steps']}, tokens={row['in_tokens']}+{row['out_tokens']}, cost=${row['cost_usd']}")
 
+        if pattern == "false_urgency":
+            print("\n  " + "-" * 50)
+            print(f"  Pattern: {pattern}")
+            print(f"  Model:   {row.get('llm')}")
+            print(f"  Intensity: {row.get('intensity')}")
+            print()
+            for step_idx, step_entry in enumerate(trace, start=1):
+                if isinstance(step_entry, dict):
+                    s_num = step_entry.get("step", step_idx)
+                    reasoning = step_entry.get("reasoning", "N/A")
+                    action = step_entry.get("action", "N/A")
+                    idx_val = step_entry.get("index")
+                    val = step_entry.get("value")
+                    act_str = f"{action} index {idx_val}" if idx_val is not None else str(action)
+                    if val:
+                        act_str += f" value={val}"
+                    print(f"  Step {s_num}")
+                    print("  Reasoning:")
+                    print(f'  "{reasoning}"')
+                    print()
+                    print("  Action:")
+                    print(f"  {act_str}")
+                    print()
+                else:
+                    print(f"  Step {step_idx}: {step_entry}")
+            print(f"  Outcome:\n  {outcome}")
+            print("  " + "-" * 50 + "\n")
+
         # Component Validations
         duration = row.get("duration_seconds")
         if duration is None or float(duration) <= 0:
