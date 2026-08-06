@@ -34,6 +34,7 @@ def main() -> None:
         "out_tokens": 0,
         "cost_usd": Decimal("0.000000"),
         "duration_seconds": Decimal("1.2345"),
+        "provider_latency_seconds": Decimal("0.8500"),
         "steps": 0,
         "judge_flag": None,
         "judge_evidence": None,

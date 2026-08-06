@@ -181,6 +181,9 @@ def main() -> dict[str, Any]:
         duration = row.get("duration_seconds")
         if duration is None or float(duration) <= 0:
             failed_contracts.append(f"Episode {i} ({pattern}): duration_seconds not properly recorded: {duration!r}")
+        prov_lat = row.get("provider_latency_seconds")
+        if prov_lat is None or float(prov_lat) < 0:
+            failed_contracts.append(f"Episode {i} ({pattern}): provider_latency_seconds not properly recorded: {prov_lat!r}")
         if not trace:
             failed_contracts.append(f"Episode {i} ({pattern}): trace array is empty")
         if pattern == "false_urgency" and outcome is not None:

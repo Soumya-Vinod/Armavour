@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -37,6 +38,7 @@ class Adapter:
 
         show_progress = os.getenv("CHHAL_PROGRESS") == "1"
         self.completion_responses = []
+        self.provider_latency_seconds = 0.0
         trace: list[dict[str, Any]] = []
         in_tokens = 0
         out_tokens = 0
@@ -109,6 +111,7 @@ class Adapter:
         }
         # Deterministic inference settings: temperature=0 enforces greedy sampling.
         # Backend provider seed parameters are passed where supported by LiteLLM backends.
+        t0 = time.time()
         response = litellm.completion(
             model=self.model,
             temperature=0,
@@ -118,6 +121,7 @@ class Adapter:
             timeout=float(os.getenv("CHHAL_PROVIDER_TIMEOUT_S", str(DEFAULT_PROVIDER_TIMEOUT_S))),
             messages=[{"role": "user", "content": json.dumps(prompt, sort_keys=True)}],
         )
+        self.provider_latency_seconds += (time.time() - t0)
         self.completion_responses.append(response)
         text = _response_text(response)
         try:

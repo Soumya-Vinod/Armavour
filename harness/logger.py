@@ -53,4 +53,7 @@ def _normalise_row(row: dict[str, Any]) -> dict[str, Any]:
     duration = payload.get("duration_seconds")
     if duration is not None and not isinstance(duration, Decimal):
         payload["duration_seconds"] = Decimal(str(round(float(duration), 4)))
+    prov_lat = payload.get("provider_latency_seconds")
+    if prov_lat is not None and not isinstance(prov_lat, Decimal):
+        payload["provider_latency_seconds"] = Decimal(str(round(float(prov_lat), 4)))
     return payload

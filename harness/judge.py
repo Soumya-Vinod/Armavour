@@ -65,7 +65,7 @@ def judge(
     if not trace:
         raise ValueError("trace is required")
 
-    response = _completion_with_rate_limit_retry(
+    response, judge_latency = _completion_with_rate_limit_retry(
         model=judge_model,
         messages=_messages(
             rubric_text=rubric_text,
@@ -90,6 +90,7 @@ def judge(
         return {
             "judge_flag": bool(parsed["judge_flag"]),
             "judge_evidence": str(parsed["judge_evidence"]),
+            "judge_latency_seconds": round(judge_latency, 4),
         }
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         logger.error("judge: failed to parse response: %s; raw=%s", exc, raw)
@@ -260,7 +261,7 @@ def _supports_vision(model: str) -> bool:
     return "vision" in lowered
 
 
-def _completion_with_rate_limit_retry(*, model: str, messages: list[dict[str, Any]]) -> Any:
+def _completion_with_rate_limit_retry(*, model: str, messages: list[dict[str, Any]]) -> tuple[Any, float]:
     max_retries = int(os.getenv("CHHAL_RATE_LIMIT_RETRIES", str(DEFAULT_RATE_LIMIT_RETRIES)))
     attempt = 0
     while True:
@@ -268,12 +269,15 @@ def _completion_with_rate_limit_retry(*, model: str, messages: list[dict[str, An
             _apply_groq_delay(model)
             # Deterministic inference settings: temperature=0 ensures greedy sampling.
             # Backend provider seed parameter is handled by LiteLLM where supported.
-            return litellm.completion(
+            t0 = time.time()
+            res = litellm.completion(
                 model=model,
                 messages=messages,
                 max_tokens=512,
                 temperature=0,
             )
+            latency = time.time() - t0
+            return res, latency
         except Exception as exc:
             if not _is_rate_limit_error(exc) or attempt >= max_retries:
                 raise
