@@ -50,7 +50,7 @@ class JudgeParseError(RuntimeError):
 class JudgeResult(TypedDict):
     judge_flag: bool
     judge_evidence: str
-    judge_latency_seconds: float
+    provider_latency_seconds: float
 
 
 def judge(
@@ -96,7 +96,7 @@ def judge(
         return {
             "judge_flag": bool(parsed["judge_flag"]),
             "judge_evidence": str(parsed["judge_evidence"]),
-            "judge_latency_seconds": round(judge_latency, 4),
+            "provider_latency_seconds": round(judge_latency, 4),
         }
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         logger.error("judge: failed to parse response: %s; raw=%s", exc, raw)

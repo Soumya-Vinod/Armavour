@@ -160,7 +160,7 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
         row = _crash_row(row_base, trace, in_tokens, out_tokens, exc)
 
     adapter_latency = float(getattr(adapter, "provider_latency_seconds", 0.0)) if "adapter" in locals() else 0.0
-    judge_latency = float(evaluation.judge_latency_seconds) if ("evaluation" in locals() and evaluation) else 0.0
+    judge_latency = float(evaluation.provider_latency_seconds) if ("evaluation" in locals() and evaluation) else 0.0
     row["duration_seconds"] = round(time.time() - start_time, 4)
     row["provider_latency_seconds"] = round(adapter_latency + judge_latency, 4)
 

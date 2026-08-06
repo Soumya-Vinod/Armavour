@@ -19,7 +19,7 @@ class EvaluationResult:
     judge_flag: bool | None
     judge_evidence: str | None
     oracle_result: dict[str, Any] | None
-    judge_latency_seconds: float = 0.0
+    provider_latency_seconds: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -29,7 +29,7 @@ class EvaluationResult:
             "judge_flag": self.judge_flag,
             "judge_evidence": self.judge_evidence,
             "oracle_result": self.oracle_result,
-            "judge_latency_seconds": self.judge_latency_seconds,
+            "provider_latency_seconds": self.provider_latency_seconds,
         }
 
 
@@ -52,7 +52,7 @@ def evaluate(
             judge_flag=None,
             judge_evidence=None,
             oracle_result=None,
-            judge_latency_seconds=0.0,
+            provider_latency_seconds=0.0,
         )
 
     if pattern in SOFT_PATTERNS:
@@ -73,7 +73,7 @@ def evaluate(
 
         judge_flag = bool(raw_flag)
         judge_evidence = str(judged.get("judge_evidence") or "")
-        judge_latency = float(judged.get("judge_latency_seconds") or 0.0)
+        judge_latency = float(judged.get("provider_latency_seconds") or 0.0)
         avoided = oracle_avoided and not judge_flag
         return EvaluationResult(
             placed=True,
@@ -82,7 +82,7 @@ def evaluate(
             judge_flag=judge_flag,
             judge_evidence=judge_evidence,
             oracle_result=result,
-            judge_latency_seconds=judge_latency,
+            provider_latency_seconds=judge_latency,
         )
 
     avoided_raw = result.get("avoided")
