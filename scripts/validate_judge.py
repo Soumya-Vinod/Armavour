@@ -27,6 +27,7 @@ def evaluate_dataset(dataset_path: Path) -> dict[str, Any]:
     fn = 0  # Actual Pos, Predicted Neg
     fp = 0  # Actual Neg, Predicted Pos
     tn = 0  # Actual Neg, Predicted Neg
+    parse_errors = 0
 
     incorrect_cases: list[dict[str, Any]] = []
 
@@ -88,6 +89,7 @@ def evaluate_dataset(dataset_path: Path) -> dict[str, Any]:
                     }
                 )
         except JudgeParseError as err:
+            parse_errors += 1
             print(" PARSE ERROR")
             incorrect_cases.append(
                 {
@@ -102,14 +104,25 @@ def evaluate_dataset(dataset_path: Path) -> dict[str, Any]:
 
     total = len(samples)
     correct = tp + tn
-    incorrect = fp + fn + (total - (correct + fp + fn))
+    incorrect = fp + fn + parse_errors
     accuracy = (correct / total * 100.0) if total > 0 else 0.0
+
+    # Note on Methodology:
+    # Overall Accuracy is evaluated over ALL attempted cases (where parse errors count as unparseable/incorrect).
+    # Precision, Recall, and F1 Score are classification metrics computed over successfully parsed predictions in the confusion matrix.
+    precision = (tp / (tp + fp)) if (tp + fp) > 0 else 0.0
+    recall = (tp / (tp + fn)) if (tp + fn) > 0 else 0.0
+    f1_score = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
 
     return {
         "total": total,
         "correct": correct,
         "incorrect": incorrect,
+        "parse_errors": parse_errors,
         "accuracy": round(accuracy, 2),
+        "precision": round(precision, 4),
+        "recall": round(recall, 4),
+        "f1_score": round(f1_score, 4),
         "fp": fp,
         "fn": fn,
         "tp": tp,
@@ -122,15 +135,19 @@ def print_report(metrics: dict[str, Any]) -> None:
     print("\n" + "-" * 48)
     print(f"Cases: {metrics['total']}")
     print()
-    print(f"Correct:   {metrics['correct']}")
-    print(f"Incorrect: {metrics['incorrect']}")
+    print(f"Correct:      {metrics['correct']}")
+    print(f"Incorrect:    {metrics['incorrect']}")
+    print(f"Parse Errors: {metrics['parse_errors']}")
     print()
-    print(f"Accuracy:  {metrics['accuracy']:.1f}%")
+    print(f"Accuracy:     {metrics['accuracy']:.1f}%  (Overall across all {metrics['total']} cases)")
+    print(f"Precision:    {metrics['precision']:.4f}  (On valid parsed predictions)")
+    print(f"Recall:       {metrics['recall']:.4f}  (On valid parsed predictions)")
+    print(f"F1 Score:     {metrics['f1_score']:.4f}  (On valid parsed predictions)")
     print()
     print(f"False Positives: {metrics['fp']}")
     print(f"False Negatives: {metrics['fn']}")
     print()
-    print("Confusion Matrix")
+    print("Confusion Matrix (Valid Parsed Predictions)")
     print(f"{'':15} {'Predicted Pos':15} {'Predicted Neg':15}")
     print(f"{'Actual Pos':15} {metrics['tp']:<15} {metrics['fn']:<15}")
     print(f"{'Actual Neg':15} {metrics['fp']:<15} {metrics['tn']:<15}")
