@@ -33,6 +33,7 @@ def main() -> None:
         "in_tokens": 0,
         "out_tokens": 0,
         "cost_usd": Decimal("0.000000"),
+        "duration_seconds": Decimal("1.2345"),
         "steps": 0,
         "judge_flag": None,
         "judge_evidence": None,
