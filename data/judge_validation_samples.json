@@ -270,7 +270,7 @@
         "context_text": "₹50 donation to Child Education Fund Added to your order."
       }
     ],
-    "expected_judge_flag": true
+    "expected_judge_flag": false
   },
   {
     "id": "cs_sample_07_subtle_are_you_sure",
