@@ -44,6 +44,7 @@ class Adapter:
         in_tokens = 0
         out_tokens = 0
 
+        terminal_reason: str | None = None
         for step in range(self.max_steps):
             if show_progress:
                 print({"event": "adapter_step_start", "step": step, "max_steps": self.max_steps}, flush=True)
@@ -52,6 +53,9 @@ class Adapter:
                 self.last_elements = elements
             except PageExtractionError:
                 if _last_action_was_click(trace):
+                    terminal_reason = "post_click_extraction_failure"
+                    if trace:
+                        trace[-1]["terminal_reason"] = terminal_reason
                     logger.warning("Treating post-click page extraction failure as terminal")
                     break
                 raise
@@ -60,31 +64,50 @@ class Adapter:
             out_tokens += usage.get("out_tokens", 0)
 
             reasoning = action.get("reasoning", "")
-            trace.append(
-                {
-                    "step": step,
-                    "reasoning": reasoning,
-                    "action": {key: value for key, value in action.items() if key != "reasoning"},
-                }
-            )
+            step_record: dict[str, Any] = {
+                "step": step,
+                "reasoning": reasoning,
+                "action": {key: value for key, value in action.items() if key != "reasoning"},
+            }
+            trace.append(step_record)
 
             if show_progress:
                 print({"event": "adapter_step_end", "step": step, "action": action.get("action")}, flush=True)
             action_type = str(action.get("action", "")).lower()
-            if action_type in ("done", "finish", "stop", "none"):
+            if action_type in ("done", "finish", "stop"):
+                terminal_reason = f"explicit_{action_type}"
+                step_record["terminal_reason"] = terminal_reason
+                logger.info("Terminal completion via explicit '%s' action", action_type)
+                break
+            if action_type == "none":
+                terminal_reason = "action_none"
+                step_record["terminal_reason"] = terminal_reason
+                logger.info("Terminal completion due to action='none'")
                 break
             try:
                 self._execute(action, handle_map)
                 if action.get("action") == "click" and _oracle_result_is_set(page):
+                    terminal_reason = "normal_completion"
+                    step_record["terminal_reason"] = terminal_reason
+                    logger.info("Normal agent completion: oracle result set after click")
                     break
             except (PlaywrightError, ValueError) as exc:
                 if isinstance(exc, ValueError) and "Invalid action index" in str(exc):
-                    logger.warning("Treating invalid action index as end of adapter run: %s", exc)
+                    terminal_reason = "invalid_action_index"
+                    step_record["terminal_reason"] = terminal_reason
+                    logger.warning("Terminal completion due to invalid action index: %s", exc)
                     break
                 if action.get("action") == "click" and _terminal_click_error(exc):
+                    terminal_reason = "terminal_click_failure"
+                    step_record["terminal_reason"] = terminal_reason
                     logger.warning("Treating terminal click failure as end of adapter run: %s", exc)
                     break
                 raise
+
+        if terminal_reason is None and trace:
+            terminal_reason = "normal_completion"
+            trace[-1]["terminal_reason"] = terminal_reason
+            logger.info("Normal agent completion")
 
         # Not part of Contract 5 return signature.
         # Accessed by evaluator.py via adapter.last_screenshot after run().
@@ -152,7 +175,10 @@ class Adapter:
                 if _checkbox_noop_error(exc):
                     _log_checkbox_noop(handle, index, action_name)
                     return
-                raise
+                try:
+                    handle.click(timeout=_action_timeout_ms())
+                except PlaywrightError:
+                    raise exc from None
         elif action_name == "uncheck":
             try:
                 handle.uncheck()
@@ -160,7 +186,10 @@ class Adapter:
                 if _checkbox_noop_error(exc):
                     _log_checkbox_noop(handle, index, action_name)
                     return
-                raise
+                try:
+                    handle.click(timeout=_action_timeout_ms())
+                except PlaywrightError:
+                    raise exc from None
         elif action_name == "fill":
             handle.fill(str(action.get("value", "")))
         else:
@@ -254,7 +283,15 @@ def _terminal_click_error(exc: PlaywrightError) -> bool:
 
 
 def _checkbox_noop_error(exc: PlaywrightError) -> bool:
-    return "clicking the checkbox did not change its state" in str(exc).lower()
+    msg = str(exc).lower()
+    return any(
+        marker in msg
+        for marker in (
+            "clicking the checkbox did not change its state",
+            "not a checkbox or radio button",
+            "not a checkbox",
+        )
+    )
 
 
 def _log_checkbox_noop(handle: ElementHandle, index: int, action_name: str) -> None:
