@@ -62,7 +62,6 @@ class APIKeyPool:
         """Return current active API key string or None if pool is empty."""
         with self._lock:
             if not self._keys:
-                # Fallback to direct env check
                 self._keys = self._load_keys_from_env()
                 if not self._keys:
                     return None
