@@ -310,6 +310,79 @@ def save_manifest(
     return manifest_path
 
 
+def save_config_manifest(run_id: str, results_dir: Path, configs: list[EpisodeConfig]) -> Path:
+    """Save exact enumerated configuration definition to results/configs_<run_id>.json."""
+    results_dir.mkdir(parents=True, exist_ok=True)
+    config_file = results_dir / f"configs_{run_id}.json"
+
+    data = [
+        {
+            "config_hash": c.config_hash,
+            "pattern": c.pattern,
+            "intensity": c.intensity,
+            "language": c.language,
+            "agent": c.agent,
+            "model": c.llm,
+            "seed": c.seed,
+        }
+        for c in configs
+    ]
+    config_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return config_file
+
+
+def save_final_manifest(
+    run_id: str,
+    results_dir: Path,
+    status: str,
+    executed_rows: list[dict[str, Any]],
+    skipped_count: int,
+    total_configs: int,
+    runtime_seconds: float,
+) -> Path:
+    """Save final experiment completion manifest to results/manifest_final_<run_id>.json."""
+    results_dir.mkdir(parents=True, exist_ok=True)
+    final_manifest_path = results_dir / f"manifest_final_{run_id}.json"
+
+    completed_count = len(executed_rows)
+    crash_count = sum(1 for r in executed_rows if r.get("outcome") is None)
+    total_cost = sum(float(r.get("cost_usd") or 0.0) for r in executed_rows)
+
+    final_data = {
+        "run_id": run_id,
+        "status": status,
+        "completed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "total_enumerated_configs": total_configs,
+        "episodes_completed": completed_count,
+        "episodes_skipped": skipped_count,
+        "crashes": crash_count,
+        "total_cost_usd": round(total_cost, 5),
+        "runtime_seconds": round(runtime_seconds, 2),
+    }
+    final_manifest_path.write_text(json.dumps(final_data, indent=4), encoding="utf-8")
+    return final_manifest_path
+
+
+def verify_config_uniqueness(logger: logging.Logger, configs: list[EpisodeConfig]) -> None:
+    """Verify that all enumerated configuration hashes are strictly unique."""
+    total = len(configs)
+    unique_hashes = {c.config_hash for c in configs}
+    unique_count = len(unique_hashes)
+
+    logger.info(f"Total Enumerated Configs : {total}")
+    logger.info(f"Unique Config Hashes     : {unique_count}")
+
+    if unique_count != total:
+        duplicates = total - unique_count
+        logger.error(
+            f"CRITICAL ERROR: Detected {duplicates} duplicate config_hash entries in benchmark matrix! "
+            f"Aborting execution immediately to preserve experiment validity."
+        )
+        sys.exit(1)
+
+    logger.info("[OK] Configuration hash uniqueness verified (zero duplicate hashes).")
+
+
 def append_crash_report(results_dir: Path, run_id: str, config: EpisodeConfig, row: dict[str, Any]) -> None:
     """Append episode crash details to results/crashes_<run_id>.csv."""
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -468,10 +541,17 @@ def main() -> None:
     configs = enumerate_benchmark_configs()
     total_configs = len(configs)
 
+    # Verify Configuration Hash Uniqueness
+    verify_config_uniqueness(logger, configs)
+
+    # Save Exact Enumerated Config List Manifest
+    config_manifest_path = save_config_manifest(run_id, results_dir, configs)
+
     # Checkpoint & Resume query
     completed_hashes = completed_config_hashes(run_id)
     remaining_configs = [c for c in configs if c.config_hash not in completed_hashes]
-    skipped_count = total_configs - len(remaining_configs)
+    skipped_configs = [c for c in configs if c.config_hash in completed_hashes]
+    skipped_count = len(skipped_configs)
 
     active_key_idx = pool.current_index() + 1
     total_keys = pool.total_keys()
@@ -506,10 +586,17 @@ def main() -> None:
 
     if skipped_count > 0:
         logger.info(f"Skipping {skipped_count} previously completed episodes for run_id '{run_id}'.")
+        for sc in skipped_configs:
+            logger.info(
+                f"  [SKIP] config_hash={sc.config_hash} pattern={sc.pattern} "
+                f"intensity={sc.intensity} language={sc.language} agent={sc.agent} "
+                f"reason=\"Already completed in Postgres\""
+            )
 
     # Save Experiment Manifest
     manifest_path = save_manifest(run_id, results_dir, runtime, total_configs, total_keys)
     logger.info(f"Immutable experiment manifest saved to {manifest_path}")
+    logger.info(f"Immutable config definition saved to {config_manifest_path}")
 
     if args.dry_run:
         logger.info("Dry-run requested. Exiting cleanly without executing episodes.")
@@ -614,6 +701,7 @@ def main() -> None:
                 logger.info("=" * 80)
 
     except KeyboardInterrupt:
+        elapsed_s = time.time() - start_time
         logger.info("")
         logger.info("=" * 80)
         logger.info("RUN INTERRUPTED")
@@ -627,6 +715,9 @@ def main() -> None:
         logger.info("=" * 80)
 
         export_summary_files(run_id, results_dir, executed_rows, skipped_count, total_configs, start_time)
+        save_final_manifest(
+            run_id, results_dir, "interrupted", executed_rows, skipped_count, total_configs, elapsed_s
+        )
         sys.exit(130)
 
     # Final Export & Reports
@@ -635,6 +726,10 @@ def main() -> None:
     )
     elapsed_total_s = time.time() - start_time
     total_cost_all = sum(float(r.get("cost_usd") or 0.0) for r in executed_rows)
+
+    final_manifest_path = save_final_manifest(
+        run_id, results_dir, "completed", executed_rows, skipped_count, total_configs, elapsed_total_s
+    )
 
     logger.info("=" * 80)
     logger.info("FINAL MATRIX REPORT")
@@ -689,6 +784,7 @@ def main() -> None:
     logger.info("")
     logger.info("Manifest :")
     logger.info(f"{manifest_path}")
+    logger.info(f"{final_manifest_path}")
     logger.info("")
     logger.info("Log :")
     logger.info(f"logs/matrix_{run_id}.log")
