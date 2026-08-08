@@ -9,7 +9,7 @@ Orchestrates the end-to-end matrix run across 4 core benchmark batches:
   - Batch 4: E2 language arms (540 episodes)
 
 Features:
-  - Startup validation of DB, directories, API key pool, and models
+  - Startup validation of DB, directories, API key pool, models, and testbed
   - Immutable experiment manifest saved to results/manifest_<run_id>.json
   - DB checkpointing & resume awareness via completed_config_hashes(run_id)
   - Automatic API key rotation logging (Groq key N/M)
@@ -53,6 +53,8 @@ from harness.runner import run_episode
 DEFAULT_RUN_ID = "matrix-full-e1e2"
 DEFAULT_AGENT_MODEL = "groq/llama-3.3-70b-versatile"
 DEFAULT_JUDGE_MODEL = "groq/openai/gpt-oss-120b"
+DEFAULT_BASE_URL = "http://localhost:5173"
+TESTBED_PREFLIGHT_TIMEOUT_MS = 15000
 REPORT_EVERY_EPISODES = 25
 
 PATTERN_TASKS = {
@@ -262,8 +264,9 @@ def validate_dependencies(logger: logging.Logger) -> None:
         errors.append("Judge model (CHHAL_JUDGE_MODEL) is not configured.")
 
     # 4. Testbed reachability — a dead Vite server turns every episode into a
-    #    crash row at full speed, so fail loudly here instead.
-    base_url = (os.getenv("BASE_URL") or "http://localhost:5173").rstrip("/")
+    #    crash row at full speed, so fail loudly here instead. Going through
+    #    Playwright also confirms the Chromium binary is installed.
+    base_url = (os.getenv("BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
     try:
         from playwright.sync_api import sync_playwright
 
@@ -271,7 +274,11 @@ def validate_dependencies(logger: logging.Logger) -> None:
             browser = playwright.chromium.launch()
             try:
                 page = browser.new_page()
-                page.goto(base_url, wait_until="domcontentloaded", timeout=15000)
+                page.goto(
+                    base_url,
+                    wait_until="domcontentloaded",
+                    timeout=TESTBED_PREFLIGHT_TIMEOUT_MS,
+                )
             finally:
                 browser.close()
     except Exception as exc:
@@ -280,6 +287,10 @@ def validate_dependencies(logger: logging.Logger) -> None:
     if errors:
         logger.error("Mandatory pre-flight dependency checks FAILED:")
         for err in errors:
+            logger.error(f"  [FAIL] {err}")
+        sys.exit(1)
+
+    logger.info("[OK] Mandatory pre-flight validation PASSED.")
 
 
 def save_manifest(
