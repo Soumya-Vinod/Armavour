@@ -261,13 +261,25 @@ def validate_dependencies(logger: logging.Logger) -> None:
     if not judge_model:
         errors.append("Judge model (CHHAL_JUDGE_MODEL) is not configured.")
 
+    # 4. Testbed reachability — a dead Vite server turns every episode into a
+    #    crash row at full speed, so fail loudly here instead.
+    base_url = (os.getenv("BASE_URL") or "http://localhost:5173").rstrip("/")
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            try:
+                page = browser.new_page()
+                page.goto(base_url, wait_until="domcontentloaded", timeout=15000)
+            finally:
+                browser.close()
+    except Exception as exc:
+        errors.append(f"Testbed unreachable at {base_url}: {exc}")
+
     if errors:
         logger.error("Mandatory pre-flight dependency checks FAILED:")
         for err in errors:
-            logger.error(f"  [FAIL] {err}")
-        sys.exit(1)
-
-    logger.info("[OK] Mandatory pre-flight validation PASSED.")
 
 
 def save_manifest(
