@@ -1,7 +1,8 @@
 import type { Intensity } from "./config";
 import { t } from "./i18n";
 
-const AD = { id: "item-ad", name: "PowerCharge Fast Cable", price: 499 };
+const AD = { id: "item-ad", name: "PowerCharge Fast Cable", price: 149 };
+
 const ORGANIC = [
   { id: "item-org-1", name: "Basic USB-C Cable", price: 199 },
   { id: "item-org-2", name: "Braided USB-C Cable", price: 299 },
