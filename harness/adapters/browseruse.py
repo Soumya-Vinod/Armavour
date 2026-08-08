@@ -11,6 +11,7 @@ from typing import Any
 from playwright.sync_api import Page
 
 from harness.adapters.common import MAX_STEPS
+from harness.providers import get_key_pool
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,11 @@ class Adapter:
         session = browser_use.BrowserSession(keep_alive=True)
         # Deterministic inference settings: temperature=0 enforces greedy sampling.
         # ChatLiteLLM passes temperature=0 to underlying provider completions.
-        llm = browser_use.ChatLiteLLM(model=getattr(config, "llm", None) or self.model, temperature=0)
+        llm_kwargs: dict[str, Any] = {"temperature": 0}
+        active_key = get_key_pool().current_key()
+        if active_key:
+            llm_kwargs["api_key"] = active_key
+        llm = browser_use.ChatLiteLLM(model=getattr(config, "llm", None) or self.model, **llm_kwargs)
         agent = browser_use.Agent(task=task, llm=llm, browser_session=session)
 
         async def on_step_start(step_agent: Any) -> None:

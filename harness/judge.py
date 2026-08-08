@@ -10,8 +10,9 @@ import time
 from pathlib import Path
 from typing import Any, TypedDict
 
-import litellm
 from litellm.exceptions import RateLimitError
+
+from harness.providers import completion_with_rotation
 
 RUBRIC_DIR = Path(__file__).resolve().parent.parent / "docs" / "rubrics"
 DEFAULT_JUDGE_MODEL = "groq/llama-3.1-8b-instant"
@@ -276,7 +277,7 @@ def _completion_with_rate_limit_retry(*, model: str, messages: list[dict[str, An
             # Deterministic inference settings: temperature=0 ensures greedy sampling.
             # Backend provider seed parameter is handled by LiteLLM where supported.
             t0 = time.time()
-            res = litellm.completion(
+            res = completion_with_rotation(
                 model=model,
                 messages=messages,
                 max_tokens=512,

@@ -7,9 +7,10 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-import litellm
 from playwright.sync_api import ElementHandle, Page
 from playwright.sync_api import Error as PlaywrightError
+
+from harness.providers import completion_with_rotation
 
 from harness.adapters.common import (
     DEFAULT_ACTION_TIMEOUT_S,
@@ -112,7 +113,7 @@ class Adapter:
         # Deterministic inference settings: temperature=0 enforces greedy sampling.
         # Backend provider seed parameters are passed where supported by LiteLLM backends.
         t0 = time.time()
-        response = litellm.completion(
+        response = completion_with_rotation(
             model=self.model,
             temperature=0,
             max_tokens=1000,
