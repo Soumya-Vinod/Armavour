@@ -43,6 +43,8 @@ class APIKeyPool:
         self._lock = threading.Lock()
         self._keys: list[str] = self._load_keys_from_env()
         self._index: int = 0
+        self._rotations_count: int = 0
+        self._episodes_per_key: dict[int, int] = {}
         self.load_state()
 
     def _load_keys_from_env(self) -> list[str]:
@@ -78,6 +80,21 @@ class APIKeyPool:
         with self._lock:
             return len(self._keys)
 
+    def record_episode(self) -> None:
+        """Record an episode execution against the currently active 1-based key index."""
+        with self._lock:
+            active_1based = self._index + 1
+            self._episodes_per_key[active_1based] = self._episodes_per_key.get(active_1based, 0) + 1
+
+    def get_rotation_summary(self) -> dict[str, Any]:
+        """Return summary of API key rotations and per-key episode execution counts."""
+        with self._lock:
+            return {
+                "total_rotations": self._rotations_count,
+                "keys_used": sorted(list(self._episodes_per_key.keys())),
+                "episodes_per_key": {f"key_{k}": v for k, v in sorted(self._episodes_per_key.items())},
+            }
+
     def rotate(self) -> str | None:
         """Rotate to next key in pool, persist checkpoint state, and return new active key."""
         with self._lock:
@@ -85,6 +102,7 @@ class APIKeyPool:
                 return None
             old_idx = self._index
             self._index = (self._index + 1) % len(self._keys)
+            self._rotations_count += 1
             provider_name = self.provider.capitalize()
             total = len(self._keys)
             logger.info(

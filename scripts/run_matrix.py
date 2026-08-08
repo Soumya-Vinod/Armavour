@@ -37,6 +37,7 @@ import importlib.metadata
 import json
 import logging
 import os
+import signal
 import subprocess
 import time
 from typing import Any
@@ -331,6 +332,25 @@ def save_config_manifest(run_id: str, results_dir: Path, configs: list[EpisodeCo
     return config_file
 
 
+def save_environment_fingerprint(run_id: str, results_dir: Path, runtime: dict[str, str]) -> Path:
+    """Save immutable environment fingerprint to results/environment_<run_id>.json."""
+    results_dir.mkdir(parents=True, exist_ok=True)
+    env_file = results_dir / f"environment_{run_id}.json"
+
+    env_data = {
+        "python_version": runtime["python_version"],
+        "os": sys.platform,
+        "litellm_version": runtime["litellm_version"],
+        "playwright_version": runtime["playwright_version"],
+        "git_commit": runtime["git_commit"],
+        "alembic_head": runtime["alembic_head"],
+        "agent_model": os.getenv("CHHAL_MODEL", DEFAULT_AGENT_MODEL),
+        "judge_model": os.getenv("CHHAL_JUDGE_MODEL", DEFAULT_JUDGE_MODEL),
+    }
+    env_file.write_text(json.dumps(env_data, indent=4), encoding="utf-8")
+    return env_file
+
+
 def save_final_manifest(
     run_id: str,
     results_dir: Path,
@@ -339,6 +359,7 @@ def save_final_manifest(
     skipped_count: int,
     total_configs: int,
     runtime_seconds: float,
+    rotation_summary: dict[str, Any] | None = None,
 ) -> Path:
     """Save final experiment completion manifest to results/manifest_final_<run_id>.json."""
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -355,9 +376,11 @@ def save_final_manifest(
         "total_enumerated_configs": total_configs,
         "episodes_completed": completed_count,
         "episodes_skipped": skipped_count,
+        "episodes_retried": 0,
         "crashes": crash_count,
         "total_cost_usd": round(total_cost, 5),
-        "runtime_seconds": round(runtime_seconds, 2),
+        "total_runtime_seconds": round(runtime_seconds, 2),
+        "api_key_rotation_summary": rotation_summary or {},
     }
     final_manifest_path.write_text(json.dumps(final_data, indent=4), encoding="utf-8")
     return final_manifest_path
@@ -593,10 +616,25 @@ def main() -> None:
                 f"reason=\"Already completed in Postgres\""
             )
 
-    # Save Experiment Manifest
+    # Save Experiment Manifest & Environment Fingerprint
     manifest_path = save_manifest(run_id, results_dir, runtime, total_configs, total_keys)
+    env_fingerprint_path = save_environment_fingerprint(run_id, results_dir, runtime)
     logger.info(f"Immutable experiment manifest saved to {manifest_path}")
     logger.info(f"Immutable config definition saved to {config_manifest_path}")
+    logger.info(f"Environment fingerprint saved to {env_fingerprint_path}")
+
+    # Startup Confirmation Banner
+    logger.info("=" * 80)
+    logger.info("STARTUP CONFIRMATION - BENCHMARK READY")
+    logger.info("=" * 80)
+    logger.info(f"Run ID:                  {run_id}")
+    logger.info(f"Git Commit:              {runtime['git_commit']}")
+    logger.info(f"Agent Model:             {os.getenv('CHHAL_MODEL', DEFAULT_AGENT_MODEL)}")
+    logger.info(f"Judge Model:             {os.getenv('CHHAL_JUDGE_MODEL', DEFAULT_JUDGE_MODEL)}")
+    logger.info(f"Active Groq Key:         Key {active_key_idx}/{total_keys}")
+    logger.info(f"Total Enumerated Configs: {total_configs}")
+    logger.info(f"Remaining After Resume:   {len(remaining_configs)}")
+    logger.info("=" * 80)
 
     if args.dry_run:
         logger.info("Dry-run requested. Exiting cleanly without executing episodes.")
@@ -605,6 +643,39 @@ def main() -> None:
     # Execution State
     executed_rows: list[dict[str, Any]] = []
     start_time = time.time()
+
+    def signal_handler(signum: int, frame: Any) -> None:
+        elapsed_s = time.time() - start_time
+        sig_name = "SIGTERM" if signum == getattr(signal, "SIGTERM", 15) else "SIGINT"
+        logger.info("")
+        logger.info("=" * 80)
+        logger.info(f"RUN INTERRUPTED ({sig_name})")
+        logger.info("=" * 80)
+        logger.info(f"Episodes Completed: {skipped_count + len(executed_rows)}")
+        logger.info(f"Episodes Remaining: {total_configs - (skipped_count + len(executed_rows))}")
+        logger.info(f"Current Cost:       ${sum(float(r.get('cost_usd') or 0.0) for r in executed_rows):.5f}")
+        logger.info("Checkpoint Saved:   Yes")
+        logger.info("Resume Command:")
+        logger.info(f"python scripts/run_matrix.py --run-id {run_id}")
+        logger.info("=" * 80)
+
+        export_summary_files(run_id, results_dir, executed_rows, skipped_count, total_configs, start_time)
+        save_final_manifest(
+            run_id,
+            results_dir,
+            "interrupted",
+            executed_rows,
+            skipped_count,
+            total_configs,
+            elapsed_s,
+            pool.get_rotation_summary(),
+        )
+        sys.exit(130)
+
+    # Register Signal Handlers for SIGINT (Ctrl+C) and SIGTERM
+    signal.signal(signal.SIGINT, signal_handler)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, signal_handler)
 
     ec_count = 0
     dc_count = 0
@@ -617,6 +688,7 @@ def main() -> None:
             ep_index = skipped_count + idx
             row = run_episode(config, run_id=run_id, log=True)
             executed_rows.append(row)
+            pool.record_episode()
 
             outcome = row.get("outcome")
             if outcome == "EC":
@@ -701,24 +773,17 @@ def main() -> None:
                 logger.info("=" * 80)
 
     except KeyboardInterrupt:
-        elapsed_s = time.time() - start_time
-        logger.info("")
-        logger.info("=" * 80)
-        logger.info("RUN INTERRUPTED")
-        logger.info("=" * 80)
-        logger.info(f"Episodes Completed: {skipped_count + len(executed_rows)}")
-        logger.info(f"Episodes Remaining: {total_configs - (skipped_count + len(executed_rows))}")
-        logger.info(f"Current Cost:       ${sum(float(r.get('cost_usd') or 0.0) for r in executed_rows):.5f}")
-        logger.info("Checkpoint Saved:   Yes")
-        logger.info("Resume Command:")
-        logger.info(f"python scripts/run_matrix.py --run-id {run_id}")
-        logger.info("=" * 80)
+        signal_handler(signal.SIGINT, None)
 
-        export_summary_files(run_id, results_dir, executed_rows, skipped_count, total_configs, start_time)
-        save_final_manifest(
-            run_id, results_dir, "interrupted", executed_rows, skipped_count, total_configs, elapsed_s
+    # End-of-Run Outcome Verification
+    sum_outcomes = ec_count + dc_count + ef_count + df_count + crash_count
+    if sum_outcomes != len(executed_rows):
+        logger.error(
+            f"CRITICAL ERROR: Outcome sum mismatch! "
+            f"EC({ec_count}) + DC({dc_count}) + EF({ef_count}) + DF({df_count}) + Crash({crash_count}) = "
+            f"{sum_outcomes} != Executed({len(executed_rows)}). Aborting."
         )
-        sys.exit(130)
+        sys.exit(1)
 
     # Final Export & Reports
     csv_path, json_path = export_summary_files(
@@ -726,9 +791,17 @@ def main() -> None:
     )
     elapsed_total_s = time.time() - start_time
     total_cost_all = sum(float(r.get("cost_usd") or 0.0) for r in executed_rows)
+    rotation_summary = pool.get_rotation_summary()
 
     final_manifest_path = save_final_manifest(
-        run_id, results_dir, "completed", executed_rows, skipped_count, total_configs, elapsed_total_s
+        run_id,
+        results_dir,
+        "completed",
+        executed_rows,
+        skipped_count,
+        total_configs,
+        elapsed_total_s,
+        rotation_summary,
     )
 
     logger.info("=" * 80)
@@ -760,6 +833,11 @@ def main() -> None:
     logger.info(f"Total Tokens In:         {sum(int(r.get('tokens_in') or 0) for r in executed_rows)}")
     logger.info(f"Total Tokens Out:        {sum(int(r.get('tokens_out') or 0) for r in executed_rows)}")
     logger.info(f"Total Cost:              ${total_cost_all:.5f}")
+    logger.info("")
+    logger.info("API Key Rotation Summary:")
+    logger.info(f"  Total Rotations:       {rotation_summary['total_rotations']}")
+    logger.info(f"  Key Indexes Used:      {rotation_summary['keys_used']}")
+    logger.info(f"  Episodes Per Key:      {rotation_summary['episodes_per_key']}")
     logger.info("")
     logger.info("Database:")
     logger.info("Postgres")
