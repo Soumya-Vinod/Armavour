@@ -163,6 +163,64 @@ def test_computeruse_normal_checked_checkbox_uncheck_still_toggles(
     assert not any("'event': 'checkbox_noop'" in record.message for record in caplog.records)
 
 
+@pytest.mark.parametrize(
+    ("action_dict", "expected_reason", "expected_log"),
+    [
+        ({"reasoning": "done now", "action": "done"}, "explicit_done", "Terminal completion via explicit 'done' action"),
+        ({"reasoning": "finish now", "action": "finish"}, "explicit_finish", "Terminal completion via explicit 'finish' action"),
+        ({"reasoning": "stop now", "action": "stop"}, "explicit_stop", "Terminal completion via explicit 'stop' action"),
+        ({"reasoning": "none action", "action": "none"}, "action_none", "Terminal completion due to action='none'"),
+    ],
+)
+def test_computeruse_terminal_action_reasons(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    action_dict: dict[str, Any],
+    expected_reason: str,
+    expected_log: str,
+) -> None:
+    monkeypatch.setattr(computeruse, "extract_elements", lambda _p: ([], {}))
+    monkeypatch.setattr(
+        computeruse.Adapter,
+        "_next_action",
+        lambda _self, _t, _c, _e, _tr: (action_dict, {"in_tokens": 5, "out_tokens": 2}),
+    )
+
+    with caplog.at_level(logging.INFO, logger="harness.adapters.computeruse"):
+        trace, in_tokens, out_tokens = computeruse.Adapter(model="model", max_steps=1).run(
+            FakeRunnerPage(), "task", config()
+        )
+
+    assert len(trace) == 1
+    assert trace[0]["terminal_reason"] == expected_reason
+    assert any(expected_log in record.message for record in caplog.records)
+
+
+def test_computeruse_invalid_action_index_terminal_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Next action returns click on non-existent index 99
+    monkeypatch.setattr(computeruse, "extract_elements", lambda _p: ([], {}))
+    monkeypatch.setattr(
+        computeruse.Adapter,
+        "_next_action",
+        lambda _self, _t, _c, _e, _tr: (
+            {"reasoning": "bad click", "action": "click", "index": 99},
+            {"in_tokens": 2, "out_tokens": 1},
+        ),
+    )
+
+    with caplog.at_level(logging.INFO, logger="harness.adapters.computeruse"):
+        trace, _, _ = computeruse.Adapter(model="model", max_steps=1).run(
+            FakeRunnerPage(), "task", config()
+        )
+
+    assert len(trace) == 1
+    assert trace[0]["terminal_reason"] == "invalid_action_index"
+    assert any("Terminal completion due to invalid action index" in record.message for record in caplog.records)
+
+
 def config() -> SimpleNamespace:
     return SimpleNamespace(llm="model")
 
