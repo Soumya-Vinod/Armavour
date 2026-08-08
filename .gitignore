@@ -7,3 +7,6 @@ Thumbs.db
 data/*
 !data/.gitkeep
 debug.log
+logs/
+results/
+.checkpoints/
