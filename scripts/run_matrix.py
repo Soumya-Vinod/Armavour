@@ -368,6 +368,14 @@ def save_final_manifest(
     completed_count = len(executed_rows)
     crash_count = sum(1 for r in executed_rows if r.get("outcome") is None)
     total_cost = sum(float(r.get("cost_usd") or 0.0) for r in executed_rows)
+    total_in = sum(
+        int(r.get("in_tokens") if r.get("in_tokens") is not None else r.get("tokens_in") or 0)
+        for r in executed_rows
+    )
+    total_out = sum(
+        int(r.get("out_tokens") if r.get("out_tokens") is not None else r.get("tokens_out") or 0)
+        for r in executed_rows
+    )
 
     final_data = {
         "run_id": run_id,
@@ -378,6 +386,10 @@ def save_final_manifest(
         "episodes_skipped": skipped_count,
         "episodes_retried": 0,
         "crashes": crash_count,
+        "total_in_tokens": total_in,
+        "total_out_tokens": total_out,
+        "total_tokens_in": total_in,
+        "total_tokens_out": total_out,
         "total_cost_usd": round(total_cost, 5),
         "total_runtime_seconds": round(runtime_seconds, 2),
         "api_key_rotation_summary": rotation_summary or {},
@@ -466,15 +478,18 @@ def export_summary_files(
         "steps",
         "duration_seconds",
         "provider_latency_seconds",
-        "tokens_in",
-        "tokens_out",
+        "in_tokens",
+        "out_tokens",
         "cost_usd",
     ]
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for row in executed_rows:
-            writer.writerow(row)
+            in_t = int(row.get("in_tokens") if row.get("in_tokens") is not None else row.get("tokens_in") or 0)
+            out_t = int(row.get("out_tokens") if row.get("out_tokens") is not None else row.get("tokens_out") or 0)
+            normalized_row = {**row, "in_tokens": in_t, "out_tokens": out_t}
+            writer.writerow(normalized_row)
 
     # Calculate Aggregate Metrics
     completed_count = len(executed_rows)
@@ -485,8 +500,12 @@ def export_summary_files(
     crash_count = sum(1 for r in executed_rows if r.get("outcome") is None)
 
     total_cost = sum(float(r.get("cost_usd") or 0.0) for r in executed_rows)
-    total_in = sum(int(r.get("tokens_in") or 0) for r in executed_rows)
-    total_out = sum(int(r.get("tokens_out") or 0) for r in executed_rows)
+    total_in = sum(
+        int(r.get("in_tokens") if r.get("in_tokens") is not None else r.get("tokens_in") or 0) for r in executed_rows
+    )
+    total_out = sum(
+        int(r.get("out_tokens") if r.get("out_tokens") is not None else r.get("tokens_out") or 0) for r in executed_rows
+    )
     total_duration = sum(float(r.get("duration_seconds") or 0.0) for r in executed_rows)
     total_provider_lat = sum(float(r.get("provider_latency_seconds") or 0.0) for r in executed_rows)
 
@@ -509,6 +528,8 @@ def export_summary_files(
         "df": df_count,
         "crash": crash_count,
         "total_cost_usd": round(total_cost, 5),
+        "total_in_tokens": total_in,
+        "total_out_tokens": total_out,
         "total_tokens_in": total_in,
         "total_tokens_out": total_out,
         "average_duration_seconds": avg_dur,
@@ -540,13 +561,72 @@ def format_eta(remaining_count: int, avg_duration_s: float) -> tuple[str, str]:
     return duration_str, completion_str
 
 
+def filter_configs_by_batch(configs: list[EpisodeConfig], batch_arg: str) -> list[EpisodeConfig]:
+    """Filter enumerated configurations by specified batch selection(s).
+
+    Supported batch tokens (comma-separated or single):
+      - 'e1a': computeruse English baseline (480 episodes)
+      - 'spotcheck' / 'spot_check': Cross-model spot-check with llama-3.1-8b-instant (60 episodes)
+      - 'e1b': browseruse English baseline (480 episodes)
+      - 'e2': E2 Multilingual arms (hi, hinglish) (540 episodes)
+      - 'all': All 1,560 benchmark episodes
+    """
+    if not batch_arg or batch_arg.strip().lower() == "all":
+        return configs
+
+    tokens = [t.strip().lower() for t in batch_arg.split(",") if t.strip()]
+    valid_tokens = {"e1a", "spotcheck", "spot_check", "e1b", "e2", "all"}
+    invalid = set(tokens) - valid_tokens
+    if invalid:
+        raise ValueError(
+            f"Invalid batch token(s): {sorted(invalid)}. "
+            f"Allowed batch tokens are: e1a, spotcheck, e1b, e2, all (or comma-separated combination)."
+        )
+
+    if "all" in tokens:
+        return configs
+
+    filtered: list[EpisodeConfig] = []
+    for c in configs:
+        matches = False
+        if (
+            "e1a" in tokens
+            and c.agent == "computeruse"
+            and c.llm == "groq/llama-3.3-70b-versatile"
+            and c.language == "en"
+            and c.seed < 10
+        ):
+            matches = True
+        elif ("spotcheck" in tokens or "spot_check" in tokens) and c.llm == "groq/llama-3.1-8b-instant":
+            matches = True
+        elif "e1b" in tokens and c.agent == "browseruse":
+            matches = True
+        elif "e2" in tokens and (
+            c.language in ("hi", "hinglish")
+            or (c.agent == "computeruse" and c.llm == "groq/llama-3.3-70b-versatile" and c.seed >= 10)
+        ):
+            matches = True
+
+        if matches:
+            filtered.append(c)
+
+    return filtered
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Armavour Full Matrix Execution Runner (~1,560 episodes)")
     parser.add_argument("--run-id", type=str, default=DEFAULT_RUN_ID, help="Unique identifier for matrix run.")
+    parser.add_argument(
+        "--batch",
+        type=str,
+        default="all",
+        help="Batch selection to run: e1a, spotcheck, e1b, e2, all (or comma-separated e.g. e1a,spotcheck,e2)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Validate setup and enumerate configs without running.")
     args = parser.parse_args()
 
     run_id = args.run_id
+    batch_arg = args.batch
     log_dir = Path("logs")
     results_dir = Path("results")
     ckpt_dir = Path(".checkpoints")
@@ -561,7 +641,8 @@ def main() -> None:
     # Perform Startup Validation
     validate_dependencies(logger)
 
-    configs = enumerate_benchmark_configs()
+    raw_configs = enumerate_benchmark_configs()
+    configs = filter_configs_by_batch(raw_configs, batch_arg)
     total_configs = len(configs)
 
     # Verify Configuration Hash Uniqueness
@@ -584,6 +665,7 @@ def main() -> None:
     logger.info("ARMAVOUR MATRIX RUN")
     logger.info("=" * 80)
     logger.info(f"Run ID:               {run_id}")
+    logger.info(f"Batch Filter:         {batch_arg}")
     logger.info(f"Timestamp:            {datetime.datetime.now(datetime.timezone.utc).isoformat()}")
     logger.info(f"Git Commit:           {runtime['git_commit']}")
     logger.info(f"Python Version:       {runtime['python_version']}")
@@ -705,8 +787,8 @@ def main() -> None:
 
             dur = float(row.get("duration_seconds") or 0.0)
             prov_lat = float(row.get("provider_latency_seconds") or 0.0)
-            t_in = int(row.get("tokens_in") or 0)
-            t_out = int(row.get("tokens_out") or 0)
+            t_in = int(row.get("in_tokens") if row.get("in_tokens") is not None else row.get("tokens_in") or 0)
+            t_out = int(row.get("out_tokens") if row.get("out_tokens") is not None else row.get("tokens_out") or 0)
             cost = float(row.get("cost_usd") or 0.0)
             steps = row.get("steps", 0)
 
@@ -736,8 +818,20 @@ def main() -> None:
                 avg_prov_so_far = (
                     sum(float(r.get("provider_latency_seconds") or 0.0) for r in executed_rows) / completed_so_far
                 )
-                avg_in_so_far = sum(int(r.get("tokens_in") or 0) for r in executed_rows) / completed_so_far
-                avg_out_so_far = sum(int(r.get("tokens_out") or 0) for r in executed_rows) / completed_so_far
+                avg_in_so_far = (
+                    sum(
+                        int(r.get("in_tokens") if r.get("in_tokens") is not None else r.get("tokens_in") or 0)
+                        for r in executed_rows
+                    )
+                    / completed_so_far
+                )
+                avg_out_so_far = (
+                    sum(
+                        int(r.get("out_tokens") if r.get("out_tokens") is not None else r.get("tokens_out") or 0)
+                        for r in executed_rows
+                    )
+                    / completed_so_far
+                )
                 tot_cost_so_far = sum(float(r.get("cost_usd") or 0.0) for r in executed_rows)
                 avg_cost_so_far = tot_cost_so_far / completed_so_far
 
@@ -830,8 +924,14 @@ def main() -> None:
     logger.info(f"Average Provider Latency: {sum(float(r.get('provider_latency_seconds') or 0.0) for r in executed_rows) / max(1, len(executed_rows)):.2f}s")
     logger.info(f"Throughput:              {(len(executed_rows) / max(1, elapsed_total_s)) * 3600:.1f} episodes/hour")
     logger.info("")
-    logger.info(f"Total Tokens In:         {sum(int(r.get('tokens_in') or 0) for r in executed_rows)}")
-    logger.info(f"Total Tokens Out:        {sum(int(r.get('tokens_out') or 0) for r in executed_rows)}")
+    tot_in = sum(
+        int(r.get("in_tokens") if r.get("in_tokens") is not None else r.get("tokens_in") or 0) for r in executed_rows
+    )
+    tot_out = sum(
+        int(r.get("out_tokens") if r.get("out_tokens") is not None else r.get("tokens_out") or 0) for r in executed_rows
+    )
+    logger.info(f"Total Tokens In:         {tot_in}")
+    logger.info(f"Total Tokens Out:        {tot_out}")
     logger.info(f"Total Cost:              ${total_cost_all:.5f}")
     logger.info("")
     logger.info("API Key Rotation Summary:")
