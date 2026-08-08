@@ -318,6 +318,8 @@ def _crash_row(
         "judge_flag": None,
         "judge_evidence": None,
         "trace": [*trace, {"exception": f"{type(exc).__name__}: {exc}"}],
+        "error_type": type(exc).__name__,
+        "error": str(exc),
     }
 
 
