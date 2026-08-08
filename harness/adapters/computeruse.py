@@ -70,13 +70,17 @@ class Adapter:
 
             if show_progress:
                 print({"event": "adapter_step_end", "step": step, "action": action.get("action")}, flush=True)
-            if action.get("action") == "done":
+            action_type = str(action.get("action", "")).lower()
+            if action_type in ("done", "finish", "stop", "none"):
                 break
             try:
                 self._execute(action, handle_map)
                 if action.get("action") == "click" and _oracle_result_is_set(page):
                     break
-            except PlaywrightError as exc:
+            except (PlaywrightError, ValueError) as exc:
+                if isinstance(exc, ValueError) and "Invalid action index" in str(exc):
+                    logger.warning("Treating invalid action index as end of adapter run: %s", exc)
+                    break
                 if action.get("action") == "click" and _terminal_click_error(exc):
                     logger.warning("Treating terminal click failure as end of adapter run: %s", exc)
                     break
