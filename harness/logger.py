@@ -30,6 +30,8 @@ def log_episode(row: dict[str, Any], *, engine: Engine | None = None, table: Tab
     if table is None:
         table = episodes_table(engine)
     payload = _normalise_row(row)
+    valid_column_names = {c.name for c in table.columns}
+    payload = {k: v for k, v in payload.items() if k in valid_column_names}
     insert_fn = sqlite_insert if engine.dialect.name == "sqlite" else pg_insert
     insert_stmt = insert_fn(table).values(payload)
     update_values = {
