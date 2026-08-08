@@ -155,25 +155,27 @@ downstream and is worth knowing before spending ~1,000 more episodes.
 
 ## Model selection
 
-**Agent model: `openai/gpt-4o-mini`.**
-Cost is negligible at this scale and it is cleaner for reviewer
-credibility than a free-tier model. Moving off
-`groq/llama-3.3-70b-versatile` also drops the TPM pacing tax
-(`CHHAL_GROQ_DELAY_S=8`, and 25s for browseruse), which at 1,565
-episodes is material wall-clock time.
+**Agent model: `groq/llama-3.3-70b-versatile`.**
+Neither dev has an OpenAI key (gpt-4o-mini was the earlier proposal and is
+out on cost), and Gemini's free tier caps at 20 requests/day — unusable at
+this scale. That leaves Groq for both roles. The re-click reliability issue
+that previously argued against llama-3.3-70b is resolved by the early
+oracle check in the computeruse adapter.
 
-**Judge model: `deepseek/deepseek-chat`.**
-Satisfies Contract 5 (judge ≠ agent) unambiguously — different provider,
-different family. Chosen after a judge-instability problem on
-confirm_shaming that rubric tightening only partly resolved (5/15 fixed,
-10/15 still misclassified, with near-identical traces returning opposite
-verdicts).
+**Judge model: `groq/openai/gpt-oss-120b`.**
+Satisfies Contract 5 — different model family and lineage from the agent,
+not merely a different model string. Selected after a judge-instability
+problem on confirm_shaming: identical rubric text scored 72.7% accuracy /
+precision 0.50 on `groq/llama-3.1-8b-instant` versus 100% accuracy across
+12 validation cases on gpt-oss-120b, reproduced over two consecutive runs
+(`data/judge_validation_samples.json`). The problem was model capability,
+not rubric wording, so no further rubric iteration was pursued.
 
-**Pairing must be validated before the full run.** A 5-episode smoke
-test on the gpt-4o-mini + deepseek-chat pairing runs first.
-
-**Pilot model retained as a comparison arm.** llama-3.3-70b traces are
-kept, not superseded — see below.
+**Schedule.** Both models run on Groq free tier, which is rate-limited per
+account. Batches are distributed across separate Groq accounts to avoid
+serialising on a single daily quota — the pilot hit its ceiling at episode
+120. Judge calls draw on a separate per-model bucket, so they do not
+consume agent quota.
 
 ---
 
