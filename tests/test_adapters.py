@@ -291,3 +291,58 @@ class FakeHistory:
 
     def last_action(self) -> dict[str, Any]:
         return {"click": {"index": 1}}
+
+
+def test_browseruse_adapter_groq_llm_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    created_agents = []
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+    class FakeBrowserSession:
+        def __init__(self, keep_alive: bool = True) -> None:
+            pass
+
+        async def must_get_current_page(self) -> Any:
+            return FakeInternalPage()
+
+        async def kill(self) -> None:
+            pass
+
+    class FakeAgent:
+        def __init__(self, *, task: str, llm: Any, browser_session: Any, use_vision: bool = True, **kwargs: Any) -> None:
+            self.task = task
+            self.llm = llm
+            self.browser_session = browser_session
+            self.use_vision = use_vision
+            self.kwargs = kwargs
+            self.state = SimpleNamespace(n_steps=1)
+            self.history = FakeHistory()
+            created_agents.append(self)
+
+        async def run(self, *, max_steps: int, on_step_start: Any, on_step_end: Any) -> FakeHistory:
+            return self.history
+
+    monkeypatch.setattr(browseruse, "_load_browser_use", lambda: SimpleNamespace(
+        Agent=FakeAgent,
+        BrowserSession=FakeBrowserSession,
+        ChatLiteLLM=None,
+    ))
+    import browser_use.llm
+    monkeypatch.setattr("browser_use.llm.ChatOpenAI", FakeChatOpenAI)
+
+    browseruse.Adapter(model="groq/llama-3.3-70b-versatile", max_steps=2).run(
+        FakeRunnerPage(), "task", SimpleNamespace(llm="groq/llama-3.3-70b-versatile")
+    )
+
+    assert len(created_agents) == 1
+    agent_inst = created_agents[0]
+    assert agent_inst.use_vision is False
+    assert agent_inst.llm.kwargs["model"] == "llama-3.3-70b-versatile"
+    assert agent_inst.llm.kwargs["base_url"] == "https://api.groq.com/openai/v1"
+    assert agent_inst.llm.kwargs["add_schema_to_system_prompt"] is True
+    assert agent_inst.llm.kwargs["dont_force_structured_output"] is True
+    assert agent_inst.llm.kwargs["remove_min_items_from_schema"] is True
+    assert agent_inst.llm.kwargs["remove_defaults_from_schema"] is True
+    assert agent_inst.kwargs.get("flash_mode") is True

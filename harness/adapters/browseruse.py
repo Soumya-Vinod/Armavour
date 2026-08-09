@@ -11,7 +11,7 @@ from typing import Any
 from playwright.sync_api import Page
 
 from harness.adapters.common import MAX_STEPS
-from harness.providers import get_key_pool
+from harness.providers import get_key_pool, is_rate_limit_error
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +49,36 @@ class Adapter:
 
         session = browser_use.BrowserSession(keep_alive=True)
         # Deterministic inference settings: temperature=0 enforces greedy sampling.
-        # ChatLiteLLM passes temperature=0 to underlying provider completions.
-        llm_kwargs: dict[str, Any] = {"temperature": 0}
+        model_name = getattr(config, "llm", None) or self.model
         active_key = get_key_pool().current_key()
-        if active_key:
-            llm_kwargs["api_key"] = active_key
-        llm = browser_use.ChatLiteLLM(model=getattr(config, "llm", None) or self.model, **llm_kwargs)
-        agent = browser_use.Agent(task=task, llm=llm, browser_session=session)
+        if model_name and ("groq" in model_name.lower() or "llama" in model_name.lower()):
+            clean_model = model_name.replace("groq/", "")
+            from browser_use.llm import ChatOpenAI
+
+            llm = ChatOpenAI(
+                model=clean_model,
+                api_key=active_key,
+                base_url="https://api.groq.com/openai/v1",
+                temperature=0,
+                add_schema_to_system_prompt=True,
+                dont_force_structured_output=True,
+                remove_min_items_from_schema=True,
+                remove_defaults_from_schema=True,
+            )
+            agent = browser_use.Agent(
+                task=task,
+                llm=llm,
+                browser_session=session,
+                use_vision=False,
+                flash_mode=True,
+                max_history_items=2,
+            )
+        else:
+            llm_kwargs: dict[str, Any] = {"temperature": 0}
+            if active_key:
+                llm_kwargs["api_key"] = active_key
+            llm = browser_use.ChatLiteLLM(model=model_name, **llm_kwargs)
+            agent = browser_use.Agent(task=task, llm=llm, browser_session=session)
 
         async def on_step_start(step_agent: Any) -> None:
             if show_progress:
@@ -79,17 +102,20 @@ class Adapter:
                     flush=True,
                 )
 
-        try:
             history = await agent.run(
                 max_steps=self.max_steps,
                 on_step_start=on_step_start,
                 on_step_end=on_step_end,
             )
+            if hasattr(history, "errors") and any(is_rate_limit_error(str(e)) for e in history.errors() if e):
+                get_key_pool().rotate()
             oracle = await _read_browseruse_oracle(agent)
             await self._capture_last_screenshot(agent)
             return history, oracle
         except Exception as exc:  # noqa: BLE001 - preserve adapter failures as trace rows.
             trace.append(f"{type(exc).__name__}: {exc}")
+            if is_rate_limit_error(exc):
+                get_key_pool().rotate()
             empty_history = getattr(agent, "history", None)
             return empty_history, None
         finally:
