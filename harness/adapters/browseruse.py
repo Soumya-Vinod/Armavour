@@ -52,7 +52,8 @@ class Adapter:
         full_task = f"{task}\n\nStart Page URL: {target_url}" if target_url else task
         initial_actions = [{"navigate": {"url": target_url, "new_tab": False}}] if target_url else None
 
-        session = browser_use.BrowserSession(keep_alive=True)
+        is_headless = os.getenv("CHHAL_HEADLESS", "1") != "0"
+        session = browser_use.BrowserSession(headless=is_headless, keep_alive=True)
         # Deterministic inference settings: temperature=0 enforces greedy sampling.
         model_name = getattr(config, "llm", None) or self.model
         active_key = get_key_pool().current_key()

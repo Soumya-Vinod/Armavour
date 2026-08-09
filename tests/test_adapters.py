@@ -237,9 +237,10 @@ class FakeRunnerPage:
 
 def fake_browser_use_module() -> SimpleNamespace:
     class FakeBrowserSession:
-        def __init__(self, *, keep_alive: bool) -> None:
+        def __init__(self, *, keep_alive: bool = True, **kwargs: Any) -> None:
             self.keep_alive = keep_alive
             self.killed = False
+            self.kwargs = kwargs
 
         async def must_get_current_page(self) -> FakeInternalPage:
             assert self.keep_alive is True
@@ -302,8 +303,8 @@ def test_browseruse_adapter_groq_llm_configuration(monkeypatch: pytest.MonkeyPat
             self.kwargs = kwargs
 
     class FakeBrowserSession:
-        def __init__(self, keep_alive: bool = True) -> None:
-            pass
+        def __init__(self, keep_alive: bool = True, **kwargs: Any) -> None:
+            self.kwargs = kwargs
 
         async def must_get_current_page(self) -> Any:
             return FakeInternalPage()
