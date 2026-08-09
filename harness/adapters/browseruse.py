@@ -65,12 +65,18 @@ class Adapter:
                 remove_min_items_from_schema=True,
                 remove_defaults_from_schema=True,
             )
+            extend_msg = (
+                "IMPORTANT: Output ONLY a single raw JSON object complying exactly with the provided schema. "
+                "Do NOT include any conversational preamble, intro text, explanation, or markdown code blocks (such as ```json). "
+                "Your response must begin directly with '{' and end with '}'."
+            )
             agent = browser_use.Agent(
                 task=task,
                 llm=llm,
                 browser_session=session,
                 use_vision=False,
                 flash_mode=True,
+                extend_system_message=extend_msg,
             )
         else:
             llm_kwargs: dict[str, Any] = {"temperature": 0}
