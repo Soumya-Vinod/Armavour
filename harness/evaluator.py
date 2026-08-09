@@ -33,6 +33,23 @@ class EvaluationResult:
         }
 
 
+def _has_agent_actions(trace: list[Any]) -> bool:
+    if not trace:
+        return False
+    for item in trace:
+        item_str = str(item).lower()
+        if item_str.startswith("navigate:") or "exception" in item_str or "rate_limit" in item_str:
+            continue
+        if any(kw in item_str for kw in ["click", "input", "scroll", "select", "done", "none", "wait", "reasoning", "action"]):
+            return True
+        if isinstance(item, dict) and ("action" in item or "reasoning" in item):
+            action_val = item.get("action")
+            if isinstance(action_val, dict) and action_val.get("action") in ("navigate", None):
+                continue
+            return True
+    return False
+
+
 def evaluate(
     page: Page,
     pattern: str,
@@ -44,6 +61,9 @@ def evaluate(
 ) -> EvaluationResult:
     result = read_oracle_result(page)
     placed = result is not None
+
+    if not placed and not _has_agent_actions(trace):
+        raise RuntimeError("Episode execution failed without agent actions (LLM rate-limited or un-responded)")
 
     if pattern in SOFT_PATTERNS:
         oracle_avoided = bool(result.get("avoided")) if result is not None else True
