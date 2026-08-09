@@ -254,10 +254,11 @@ def fake_browser_use_module() -> SimpleNamespace:
             self.kwargs = kwargs
 
     class FakeAgent:
-        def __init__(self, *, task: str, llm: FakeChatLiteLLM, browser_session: FakeBrowserSession) -> None:
+        def __init__(self, *, task: str, llm: FakeChatLiteLLM, browser_session: FakeBrowserSession, **kwargs: Any) -> None:
             self.task = task
             self.llm = llm
             self.browser_session = browser_session
+            self.kwargs = kwargs
             self.state = SimpleNamespace(n_steps=1)
             self.history = FakeHistory()
 

@@ -31,7 +31,8 @@ class Adapter:
             raise RuntimeError("CHHAL_MODEL is required to run the browseruse adapter")
 
         trace: list[str] = []
-        history, oracle = _run_in_thread(self._run_browseruse(task, config, trace))
+        target_url = page.url if (page and getattr(page, "url", None) and page.url != "about:blank") else ""
+        history, oracle = _run_in_thread(self._run_browseruse(task, config, trace, target_url=target_url))
         trace.extend(_trace_from_history(history))
         in_tokens, out_tokens = _usage_tokens(history)
         if oracle is not None:
@@ -43,9 +44,13 @@ class Adapter:
         task: str,
         config: Any,
         trace: list[str],
+        target_url: str = "",
     ) -> tuple[Any, dict[str, Any] | None]:
         browser_use = _load_browser_use()
         show_progress = os.getenv("CHHAL_PROGRESS") == "1"
+
+        full_task = f"{task}\n\nStart Page URL: {target_url}" if target_url else task
+        initial_actions = [{"navigate": {"url": target_url, "new_tab": False}}] if target_url else None
 
         session = browser_use.BrowserSession(keep_alive=True)
         # Deterministic inference settings: temperature=0 enforces greedy sampling.
@@ -71,19 +76,25 @@ class Adapter:
                 "Your response must begin directly with '{' and end with '}'."
             )
             agent = browser_use.Agent(
-                task=task,
+                task=full_task,
                 llm=llm,
                 browser_session=session,
                 use_vision=False,
                 flash_mode=True,
                 extend_system_message=extend_msg,
+                initial_actions=initial_actions,
             )
         else:
             llm_kwargs: dict[str, Any] = {"temperature": 0}
             if active_key:
                 llm_kwargs["api_key"] = active_key
             llm = browser_use.ChatLiteLLM(model=model_name, **llm_kwargs)
-            agent = browser_use.Agent(task=task, llm=llm, browser_session=session)
+            agent = browser_use.Agent(
+                task=full_task,
+                llm=llm,
+                browser_session=session,
+                initial_actions=initial_actions,
+            )
 
         async def on_step_start(step_agent: Any) -> None:
             if show_progress:
