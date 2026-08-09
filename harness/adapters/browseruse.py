@@ -118,6 +118,13 @@ class Adapter:
                     },
                     flush=True,
                 )
+            try:
+                oracle = await _read_browseruse_oracle(step_agent)
+                if oracle is not None:
+                    logger.info("browseruse: oracle result detected on step %s, stopping early", _current_step(step_agent))
+                    step_agent.stop()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("browseruse: early oracle check: %s", exc)
 
         try:
             history = await agent.run(

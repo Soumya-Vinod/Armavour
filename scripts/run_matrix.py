@@ -646,7 +646,16 @@ def main() -> None:
         help="Batch selection to run: e1a, spotcheck, e1b, e2, all (or comma-separated e.g. e1a,spotcheck,e2)",
     )
     parser.add_argument("--dry-run", action="store_true", help="Validate setup and enumerate configs without running.")
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=5,
+        help="Maximum step budget per episode (default: 5).",
+    )
     args = parser.parse_args()
+
+    if args.max_steps:
+        os.environ["CHHAL_MAX_STEPS"] = str(args.max_steps)
 
     run_id = args.run_id
     batch_arg = args.batch
