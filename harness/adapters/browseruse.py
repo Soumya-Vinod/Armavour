@@ -102,6 +102,7 @@ class Adapter:
                     flush=True,
                 )
 
+        try:
             history = await agent.run(
                 max_steps=self.max_steps,
                 on_step_start=on_step_start,
