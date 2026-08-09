@@ -71,7 +71,6 @@ class Adapter:
                 browser_session=session,
                 use_vision=False,
                 flash_mode=True,
-                max_history_items=2,
             )
         else:
             llm_kwargs: dict[str, Any] = {"temperature": 0}
