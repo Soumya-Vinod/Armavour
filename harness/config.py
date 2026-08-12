@@ -65,7 +65,30 @@ class EpisodeConfig:
 
     @property
     def config_hash(self) -> str:
-        payload = json.dumps(asdict(self), sort_keys=True, separators=(",", ":"))
+        if self.instruction_language == "en":
+            data = {
+                "agent": self.agent,
+                "intensity": self.intensity,
+                "language": self.ui_language,
+                "llm": self.llm,
+                "pattern": self.pattern,
+                "seed": self.seed,
+                "site": self.site,
+                "task_id": self.task_id,
+            }
+        else:
+            data = {
+                "agent": self.agent,
+                "instruction_language": self.instruction_language,
+                "intensity": self.intensity,
+                "llm": self.llm,
+                "pattern": self.pattern,
+                "seed": self.seed,
+                "site": self.site,
+                "task_id": self.task_id,
+                "ui_language": self.ui_language,
+            }
+        payload = json.dumps(data, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def to_dict(self) -> dict[str, str | int]:
