@@ -331,7 +331,6 @@ def test_browseruse_adapter_groq_llm_configuration(monkeypatch: pytest.MonkeyPat
         BrowserSession=FakeBrowserSession,
         ChatLiteLLM=None,
     ))
-    import browser_use.llm
     monkeypatch.setattr("browser_use.llm.ChatOpenAI", FakeChatOpenAI)
 
     browseruse.Adapter(model="groq/llama-3.3-70b-versatile", max_steps=2).run(

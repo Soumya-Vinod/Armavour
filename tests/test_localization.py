@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import pytest
-from harness.config import TASK_PROMPTS, TRANSLATIONS, EpisodeConfig, get_localized_instruction, load_task_prompt
+from harness.config import TASK_PROMPTS, EpisodeConfig, get_localized_instruction, load_task_prompt
 
 
 def test_get_localized_instruction_non_identity() -> None:
