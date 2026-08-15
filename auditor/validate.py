@@ -145,8 +145,8 @@ def run_testbed_validation(
                     page = browser.new_page(user_agent=config.user_agent)
                     try:
                         trace = run_audit(url=testbed_url, task=task, config=config, adapter=adapter, page=page)
-                        if trace.stopped_reason == "error":
-                            logger.warning("Validation episode for %s @ %s finished with error", p_target, intensity)
+                        if not trace.steps:
+                            logger.warning("Validation episode for %s @ %s finished with no steps captured", p_target, intensity)
                             continue
 
                         report = detect_violations(trace)

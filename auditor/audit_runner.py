@@ -217,8 +217,17 @@ def run_audit(
                 try:
                     adapter._execute(action, handle_map)
                 except (PlaywrightError, ValueError) as exc:
+                    if isinstance(exc, ValueError) and "Invalid action index" in str(exc):
+                        logger.info("Terminal step due to invalid action index at step %d: %s", step_idx, exc)
+                        stopped_reason = "agent_done"
+                        break
+                    if isinstance(exc, PlaywrightError) and _is_terminal_click_error(exc):
+                        logger.info("Terminal click failure at step %d: %s", step_idx, exc)
+                        stopped_reason = "agent_done"
+                        break
                     logger.warning("Step %d action execution error: %s", step_idx, exc)
                     stopped_reason = "error"
+                    break
 
             # AFTER step: capture snapshot, screenshot, cart state, and archive evidence
             dom_snapshot = page.content()
@@ -270,3 +279,18 @@ def run_audit(
 
     log_audit_end(config.site_id, trace, stopped_reason)
     return trace
+
+
+def _is_terminal_click_error(exc: PlaywrightError) -> bool:
+    msg = str(exc).lower()
+    return any(
+        marker in msg
+        for marker in (
+            "timeout",
+            "element is not enabled",
+            "execution context was destroyed",
+            "target closed",
+            "page closed",
+            "frame was detached",
+        )
+    )
