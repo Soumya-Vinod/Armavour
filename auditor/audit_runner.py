@@ -144,13 +144,14 @@ def run_audit(
     playwright_instance = None
     browser_instance = None
 
+    cm = None
     if page is None:
         own_browser = True
-        playwright_instance = sync_playwright().start()
+        cm = sync_playwright()
+        playwright_instance = cm.__enter__()
         browser_instance = playwright_instance.chromium.launch(headless=True)
         context = browser_instance.new_context(user_agent=config.user_agent)
         page = context.new_page()
-        page.goto(url, wait_until="domcontentloaded")
 
     trace = AuditTrace(
         site_id=config.site_id,
@@ -162,6 +163,14 @@ def run_audit(
     trace_history: list[dict[str, Any]] = []
 
     try:
+        try:
+            page.goto(url, wait_until="domcontentloaded")
+        except PlaywrightError as exc:
+            logger.warning("Page navigation failed for url=%s: %s", url, exc)
+            trace.completed_at = datetime.now(timezone.utc)
+            trace.stopped_reason = "error"
+            log_audit_end(config.site_id, trace, "error")
+            return trace
         for step_idx in range(config.max_steps):
             current_url = page.url or url
 
@@ -250,8 +259,8 @@ def run_audit(
         if own_browser:
             if browser_instance:
                 browser_instance.close()
-            if playwright_instance:
-                playwright_instance.stop()
+            if cm:
+                cm.__exit__(None, None, None)
 
     trace.completed_at = datetime.now(timezone.utc)
     trace.stopped_reason = stopped_reason

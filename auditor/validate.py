@@ -9,6 +9,7 @@ from typing import Any
 from auditor.audit_runner import AuditConfig, run_audit
 from auditor.detector import ALL_PATTERNS, detect_violations
 from harness.adapters.computeruse import Adapter
+from playwright.sync_api import sync_playwright
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,13 @@ class PatternMetrics:
     notes: str = ""
 
     def calculate_scores(self) -> None:
+        total = self.tp + self.fp + self.fn + self.tn
+        if total == 0 or (self.tp == 0 and self.fp == 0 and self.fn == 0):
+            self.precision = 0.0
+            self.recall = 0.0
+            self.f1 = 0.0
+            return
+
         if self.tp + self.fp > 0:
             self.precision = round(self.tp / (self.tp + self.fp), 4)
         else:
@@ -118,36 +126,48 @@ def run_testbed_validation(
     if adapter is None:
         adapter = Adapter(max_steps=10)
 
-    for p_target in target_patterns:
-        for intensity in target_intensities:
-            testbed_url = f"{base_url.rstrip('/')}/?pattern={p_target}&intensity={intensity}&lang=en&seed=0"
-            task = f"Browse product and attempt purchase under pattern {p_target}"
-            config = AuditConfig(
-                site_id=f"testbed_{p_target}_{intensity}",
-                is_real_site=False,
-                max_steps=10,
-                stop_before_payment=True,
-            )
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            for p_target in target_patterns:
+                for intensity in target_intensities:
+                    testbed_url = f"{base_url.rstrip('/')}/?pattern={p_target}&intensity={intensity}&lang=en&seed=0"
+                    task = f"Browse product and attempt purchase under pattern {p_target}"
+                    config = AuditConfig(
+                        site_id=f"testbed_{p_target}_{intensity}",
+                        is_real_site=False,
+                        max_steps=10,
+                        stop_before_payment=True,
+                    )
 
-            try:
-                trace = run_audit(url=testbed_url, task=task, config=config, adapter=adapter)
-                report = detect_violations(trace)
+                    page = browser.new_page(user_agent=config.user_agent)
+                    try:
+                        trace = run_audit(url=testbed_url, task=task, config=config, adapter=adapter, page=page)
+                        if trace.stopped_reason == "error":
+                            logger.warning("Validation episode for %s @ %s finished with error", p_target, intensity)
+                            continue
 
-                for checked_pattern, metrics in metrics_map.items():
-                    detected = report.summary.get(checked_pattern, False)
-                    ground_truth = (checked_pattern == p_target) and (intensity != "control")
+                        report = detect_violations(trace)
 
-                    if ground_truth and detected:
-                        metrics.tp += 1
-                    elif not ground_truth and detected:
-                        metrics.fp += 1
-                    elif ground_truth and not detected:
-                        metrics.fn += 1
-                    else:
-                        metrics.tn += 1
+                        for checked_pattern, metrics in metrics_map.items():
+                            detected = report.summary.get(checked_pattern, False)
+                            ground_truth = (checked_pattern == p_target) and (intensity != "control")
 
-            except Exception as exc:
-                logger.error("Validation failed for %s @ %s: %s", p_target, intensity, exc)
+                            if ground_truth and detected:
+                                metrics.tp += 1
+                            elif not ground_truth and detected:
+                                metrics.fp += 1
+                            elif ground_truth and not detected:
+                                metrics.fn += 1
+                            else:
+                                metrics.tn += 1
+
+                    except Exception as exc:
+                        logger.error("Validation failed for %s @ %s: %s", p_target, intensity, exc)
+                    finally:
+                        page.close()
+    except Exception as exc:
+        logger.error("Playwright batch initialization failed: %s", exc)
 
     for metrics in metrics_map.values():
         metrics.calculate_scores()
