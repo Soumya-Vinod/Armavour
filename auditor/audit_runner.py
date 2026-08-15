@@ -140,6 +140,9 @@ def run_audit(
     robots_status = check_robots_txt(url, config.user_agent)
     log_audit_start(config.site_id, url, robots_status, config)
 
+    if not hasattr(adapter, "provider_latency_seconds"):
+        setattr(adapter, "provider_latency_seconds", 0.0)
+
     own_browser = False
     playwright_instance = None
     browser_instance = None
