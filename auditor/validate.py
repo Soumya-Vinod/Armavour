@@ -80,15 +80,21 @@ class ValidationReport:
         total_fp = sum(m.fp for m in self.per_pattern.values())
         total_fn = sum(m.fn for m in self.per_pattern.values())
 
+        if total_tp + total_fp + total_fn == 0:
+            self.overall_precision = 0.0
+            self.overall_recall = 0.0
+            self.overall_f1 = 0.0
+            return
+
         if total_tp + total_fp > 0:
             self.overall_precision = round(total_tp / (total_tp + total_fp), 4)
         else:
-            self.overall_precision = 1.0 if total_fn == 0 else 0.0
+            self.overall_precision = 0.0
 
         if total_tp + total_fn > 0:
             self.overall_recall = round(total_tp / (total_tp + total_fn), 4)
         else:
-            self.overall_recall = 1.0 if total_fp == 0 else 0.0
+            self.overall_recall = 0.0
 
         if self.overall_precision + self.overall_recall > 0:
             self.overall_f1 = round(
@@ -187,9 +193,13 @@ def print_validation_report(report: ValidationReport) -> None:
     print(f"{'PATTERN':<26} | {'TP':<3} | {'FP':<3} | {'FN':<3} | {'TN':<3} | {'PREC':<6} | {'REC':<6} | {'F1':<6} | {'STATUS'}")
     print("-" * 80)
 
+    total_evals = sum(m.tp + m.fp + m.fn + m.tn for m in report.per_pattern.values())
+
     for p, metrics in report.per_pattern.items():
         status = "OK"
-        if metrics.f1 < 0.7:
+        if metrics.tp + metrics.fp + metrics.fn + metrics.tn == 0:
+            status = "NO DATA / ERRORED"
+        elif metrics.f1 < 0.7:
             status = "NEEDS REVIEW (<0.7)"
 
         print(
@@ -198,10 +208,13 @@ def print_validation_report(report: ValidationReport) -> None:
         )
 
     print("-" * 80)
-    print(
-        f"OVERALL METRICS: Precision={report.overall_precision:.4f} | "
-        f"Recall={report.overall_recall:.4f} | F1={report.overall_f1:.4f}"
-    )
+    if total_evals == 0:
+        print("OVERALL METRICS: NO EPISODES EVALUATED (Precision=0.0000 | Recall=0.0000 | F1=0.0000)")
+    else:
+        print(
+            f"OVERALL METRICS: Precision={report.overall_precision:.4f} | "
+            f"Recall={report.overall_recall:.4f} | F1={report.overall_f1:.4f}"
+        )
     print("=" * 80 + "\n")
 
 

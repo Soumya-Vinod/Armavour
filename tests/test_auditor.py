@@ -238,3 +238,22 @@ def test_validation_metrics_calculation(capsys: pytest.CaptureFixture[str]) -> N
     captured = capsys.readouterr().out
     assert "ARMVOUR AUDITOR VALIDATION REPORT" in captured
     assert "basket_sneaking" in captured
+
+
+def test_zero_evaluation_metrics_reporting(capsys: pytest.CaptureFixture[str]) -> None:
+    pm = PatternMetrics(pattern="basket_sneaking", tp=0, fp=0, fn=0, tn=0)
+    pm.calculate_scores()
+    assert pm.precision == 0.0
+    assert pm.recall == 0.0
+    assert pm.f1 == 0.0
+
+    report = ValidationReport(per_pattern={"basket_sneaking": pm})
+    report.calculate_overall()
+    assert report.overall_precision == 0.0
+    assert report.overall_recall == 0.0
+    assert report.overall_f1 == 0.0
+
+    print_validation_report(report)
+    captured = capsys.readouterr().out
+    assert "NO EPISODES EVALUATED" in captured
+    assert "NO DATA / ERRORED" in captured
