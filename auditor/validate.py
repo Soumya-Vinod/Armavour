@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -110,7 +111,7 @@ class ValidationReport:
 def run_testbed_validation(
     patterns: list[str] | None = None,
     intensities: list[str] | None = None,
-    base_url: str = "http://localhost:3000",
+    base_url: str = "http://localhost:5173",
     adapter: Any | None = None,
 ) -> ValidationReport:
     """Run auditor against testbed URLs and compute precision/recall/F1 per pattern."""
@@ -124,7 +125,8 @@ def run_testbed_validation(
     }
 
     if adapter is None:
-        adapter = Adapter(max_steps=10)
+        model_name = os.getenv("CHHAL_MODEL") or "groq/llama-3.3-70b-versatile"
+        adapter = Adapter(model=model_name, max_steps=10)
 
     try:
         with sync_playwright() as p:
@@ -217,8 +219,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--base-url",
-        default="http://localhost:3000",
-        help="Base URL of testbed app (default: http://localhost:3000)",
+        default="http://localhost:5173",
+        help="Base URL of testbed app (default: http://localhost:5173)",
     )
     args = parser.parse_args()
 
