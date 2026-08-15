@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from auditor.audit_runner import AuditStep, AuditTrace
@@ -356,8 +357,33 @@ def detect_forced_action(trace: AuditTrace) -> Detection:
 # --- JUDGE-BASED DETECTORS ---
 
 
+def _is_rubric_available(pattern: str) -> bool:
+    """Check if rubric exists and contains actual judge template prompt."""
+    rubric_path = Path("docs/rubrics") / f"{pattern}.md"
+    if not rubric_path.exists():
+        return False
+    try:
+        content = rubric_path.read_text(encoding="utf-8").strip()
+        if content.startswith("STATUS: PENDING") or "## Judge prompt (template)" not in content:
+            return False
+        return True
+    except Exception:
+        return False
+
+
 def _run_judge_detector(pattern: str, trace: AuditTrace, candidate_steps: list[AuditStep]) -> Detection:
     """Safely run LLM judge on candidate steps for a given pattern (handles missing rubrics)."""
+    if not _is_rubric_available(pattern):
+        logger.info("Rubric not available or pending for pattern %s; skipping judge LLM call", pattern)
+        return Detection(
+            pattern=pattern,
+            detected=False,
+            confidence="low",
+            evidence=f"rubric_not_available: {pattern}",
+            step_index=0,
+            detection_method="judge",
+        )
+
     if not candidate_steps:
         return Detection(
             pattern=pattern,
@@ -413,7 +439,7 @@ def _run_judge_detector(pattern: str, trace: AuditTrace, candidate_steps: list[A
             detection_method="judge",
         )
     except Exception as exc:
-        logger.warning("Judge execution error for pattern %s: %s", pattern, exc)
+        logger.info("Judge execution error for pattern %s: %s; treating as rubric_not_available", pattern, exc)
         return Detection(
             pattern=pattern,
             detected=False,
