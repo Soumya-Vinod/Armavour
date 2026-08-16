@@ -7,4 +7,5 @@ alembic>=1.13
 psycopg[binary]>=3.2
 python-dotenv>=1.0
 pytest>=8.0
+pandas>=2.0
 ruff==0.15.20
