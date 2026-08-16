@@ -110,13 +110,30 @@ def get_runtime_versions() -> dict[str, str]:
     }
 
 
+def get_batch_name_for_config(config: EpisodeConfig) -> str:
+    """Determine matrix batch classification for a given EpisodeConfig."""
+    if config.llm == "groq/llama-3.1-8b-instant":
+        return "Spotcheck"
+    if config.agent == "browseruse":
+        return "E1b"
+    if config.instruction_language == "hi" and config.ui_language == "hi":
+        return "E2a"
+    if config.instruction_language == "hinglish" and config.ui_language == "hinglish":
+        return "E2b"
+    if config.instruction_language == "en" and (config.ui_language in ("hi", "hinglish") or config.seed >= 10):
+        return "E2"
+    return "E1a"
+
+
 def enumerate_benchmark_configs() -> list[EpisodeConfig]:
     """
-    Enumerate all 1,560 configurations comprising the Armavour benchmark matrix:
+    Enumerate configurations comprising the Armavour benchmark matrix:
       1. E1a computeruse (480 episodes)
       2. Cross-model spot-check (60 episodes)
       3. E1b browseruse (480 episodes)
       4. E2 language arms (540 episodes)
+      5. E2a Hindi instructions + Hindi UI (180 episodes)
+      6. E2b Hinglish instructions + Hinglish UI (180 episodes)
     """
     configs: list[EpisodeConfig] = []
     all_patterns = list(PATTERN_TASKS.keys())
@@ -130,7 +147,8 @@ def enumerate_benchmark_configs() -> list[EpisodeConfig]:
                 task_id=PATTERN_TASKS[p],
                 patterns=[p],
                 intensities=all_intensities,
-                languages=["en"],
+                ui_languages=["en"],
+                instruction_languages=["en"],
                 agents=["computeruse"],
                 llms=["groq/llama-3.3-70b-versatile"],
                 repeat_count=10,
@@ -146,7 +164,8 @@ def enumerate_benchmark_configs() -> list[EpisodeConfig]:
                 task_id=PATTERN_TASKS[p],
                 patterns=[p],
                 intensities=["aggressive"],
-                languages=["en"],
+                ui_languages=["en"],
+                instruction_languages=["en"],
                 agents=["computeruse"],
                 llms=["groq/llama-3.1-8b-instant"],
                 repeat_count=5,
@@ -162,7 +181,8 @@ def enumerate_benchmark_configs() -> list[EpisodeConfig]:
                 task_id=PATTERN_TASKS[p],
                 patterns=[p],
                 intensities=all_intensities,
-                languages=["en"],
+                ui_languages=["en"],
+                instruction_languages=["en"],
                 agents=["browseruse"],
                 llms=["groq/llama-3.3-70b-versatile"],
                 repeat_count=10,
@@ -186,11 +206,46 @@ def enumerate_benchmark_configs() -> list[EpisodeConfig]:
                 task_id=PATTERN_TASKS[p],
                 patterns=[p],
                 intensities=["control", "moderate", "aggressive"],
-                languages=["en", "hi", "hinglish"],
+                ui_languages=["en", "hi", "hinglish"],
+                instruction_languages=["en", "en", "en"],
                 agents=["computeruse"],
                 llms=["groq/llama-3.3-70b-versatile"],
                 repeat_count=10,
                 seed_start=10,  # Distinct seeds from E1a
+            )
+        )
+
+    # 5. E2a — Hindi instructions + Hindi UI (180 episodes)
+    for p in e2_patterns:
+        configs.extend(
+            enumerate_configs(
+                site="ticketing",
+                task_id=PATTERN_TASKS[p],
+                patterns=[p],
+                intensities=["control", "moderate", "aggressive"],
+                ui_languages=["hi"],
+                instruction_languages=["hi"],
+                agents=["computeruse"],
+                llms=["groq/llama-3.3-70b-versatile"],
+                repeat_count=10,
+                seed_start=20,
+            )
+        )
+
+    # 6. E2b — Hinglish instructions + Hinglish UI (180 episodes)
+    for p in e2_patterns:
+        configs.extend(
+            enumerate_configs(
+                site="ticketing",
+                task_id=PATTERN_TASKS[p],
+                patterns=[p],
+                intensities=["control", "moderate", "aggressive"],
+                ui_languages=["hinglish"],
+                instruction_languages=["hinglish"],
+                agents=["computeruse"],
+                llms=["groq/llama-3.3-70b-versatile"],
+                repeat_count=10,
+                seed_start=30,
             )
         )
 
@@ -495,6 +550,9 @@ def export_summary_files(
         "pattern",
         "intensity",
         "language",
+        "instruction_language",
+        "ui_language",
+        "instruction_prompt",
         "agent",
         "model",
         "outcome",
@@ -511,7 +569,13 @@ def export_summary_files(
         for row in executed_rows:
             in_t = int(row.get("in_tokens") if row.get("in_tokens") is not None else row.get("tokens_in") or 0)
             out_t = int(row.get("out_tokens") if row.get("out_tokens") is not None else row.get("tokens_out") or 0)
-            normalized_row = {**row, "in_tokens": in_t, "out_tokens": out_t}
+            normalized_row = {
+                **row,
+                "in_tokens": in_t,
+                "out_tokens": out_t,
+                "ui_language": row.get("ui_language", row.get("language", "en")),
+                "instruction_language": row.get("instruction_language", "en"),
+            }
             writer.writerow(normalized_row)
 
     # Calculate Aggregate Metrics
@@ -537,6 +601,37 @@ def export_summary_files(
     avg_prov_lat = round(total_provider_lat / completed_count, 2) if completed_count > 0 else 0.0
     throughput = round((completed_count / elapsed_s) * 3600, 1) if elapsed_s > 0 else 0.0
 
+    batch_stats: dict[str, dict[str, int]] = {}
+    for row in executed_rows:
+        instr_l = row.get("instruction_language", "en")
+        ui_l = row.get("ui_language", row.get("language", "en"))
+        llm = str(row.get("model", ""))
+        agent = str(row.get("agent", ""))
+        seed = int(row.get("seed", 0))
+
+        if llm == "groq/llama-3.1-8b-instant":
+            b_key = "Spotcheck"
+        elif agent == "browseruse":
+            b_key = "E1b"
+        elif instr_l == "hi" and ui_l == "hi":
+            b_key = "E2a"
+        elif instr_l == "hinglish" and ui_l == "hinglish":
+            b_key = "E2b"
+        elif instr_l == "en" and (ui_l in ("hi", "hinglish") or seed >= 10):
+            b_key = "E2"
+        else:
+            b_key = "E1a"
+
+        if b_key not in batch_stats:
+            batch_stats[b_key] = {"completed": 0, "ec": 0, "dc": 0, "ef": 0, "df": 0, "crash": 0}
+
+        batch_stats[b_key]["completed"] += 1
+        outcome = row.get("outcome")
+        if outcome in ("EC", "DC", "EF", "DF"):
+            batch_stats[b_key][outcome.lower()] += 1
+        elif outcome is None:
+            batch_stats[b_key]["crash"] += 1
+
     json_data = {
         "run_id": run_id,
         "started_at": datetime.datetime.fromtimestamp(start_time, datetime.timezone.utc).isoformat(),
@@ -558,6 +653,7 @@ def export_summary_files(
         "average_duration_seconds": avg_dur,
         "average_provider_latency_seconds": avg_prov_lat,
         "throughput_episodes_per_hour": throughput,
+        "batch_stats": batch_stats,
     }
     json_path.write_text(json.dumps(json_data, indent=4), encoding="utf-8")
 
@@ -591,19 +687,22 @@ def filter_configs_by_batch(configs: list[EpisodeConfig], batch_arg: str) -> lis
       - 'e1a': computeruse English baseline (480 episodes)
       - 'spotcheck' / 'spot_check': Cross-model spot-check with llama-3.1-8b-instant (60 episodes)
       - 'e1b': browseruse English baseline (480 episodes)
-      - 'e2': E2 Multilingual arms (hi, hinglish) (540 episodes)
-      - 'all': All 1,560 benchmark episodes
+      - 'e1': Combined E1a + E1b English baselines (960 episodes)
+      - 'e2': E2 Multilingual arms (English instruction -> hi/hinglish UI) (540 episodes)
+      - 'e2a': E2a Hindi instructions + Hindi UI (180 episodes)
+      - 'e2b': E2b Hinglish instructions + Hinglish UI (180 episodes)
+      - 'all': All benchmark episodes
     """
     if not batch_arg or batch_arg.strip().lower() == "all":
         return configs
 
     tokens = [t.strip().lower() for t in batch_arg.split(",") if t.strip()]
-    valid_tokens = {"e1a", "spotcheck", "spot_check", "e1b", "e2", "all"}
+    valid_tokens = {"e1a", "spotcheck", "spot_check", "e1b", "e1", "e2", "e2a", "e2b", "all"}
     invalid = set(tokens) - valid_tokens
     if invalid:
         raise ValueError(
             f"Invalid batch token(s): {sorted(invalid)}. "
-            f"Allowed batch tokens are: e1a, spotcheck, e1b, e2, all (or comma-separated combination)."
+            f"Allowed batch tokens are: e1a, spotcheck, e1b, e1, e2, e2a, e2b, all (or comma-separated combination)."
         )
 
     if "all" in tokens:
@@ -611,23 +710,21 @@ def filter_configs_by_batch(configs: list[EpisodeConfig], batch_arg: str) -> lis
 
     filtered: list[EpisodeConfig] = []
     for c in configs:
+        b_name = get_batch_name_for_config(c).lower()
         matches = False
-        if (
-            "e1a" in tokens
-            and c.agent == "computeruse"
-            and c.llm == "groq/llama-3.3-70b-versatile"
-            and c.language == "en"
-            and c.seed < 10
-        ):
+        if "e1a" in tokens and b_name == "e1a":
             matches = True
-        elif ("spotcheck" in tokens or "spot_check" in tokens) and c.llm == "groq/llama-3.1-8b-instant":
+        elif ("spotcheck" in tokens or "spot_check" in tokens) and b_name == "spotcheck":
             matches = True
-        elif "e1b" in tokens and c.agent == "browseruse":
+        elif "e1b" in tokens and b_name == "e1b":
             matches = True
-        elif "e2" in tokens and (
-            c.language in ("hi", "hinglish")
-            or (c.agent == "computeruse" and c.llm == "groq/llama-3.3-70b-versatile" and c.seed >= 10)
-        ):
+        elif "e1" in tokens and b_name in ("e1a", "e1b"):
+            matches = True
+        elif "e2" in tokens and b_name == "e2":
+            matches = True
+        elif "e2a" in tokens and b_name == "e2a":
+            matches = True
+        elif "e2b" in tokens and b_name == "e2b":
             matches = True
 
         if matches:
@@ -637,16 +734,25 @@ def filter_configs_by_batch(configs: list[EpisodeConfig], batch_arg: str) -> lis
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Armavour Full Matrix Execution Runner (~1,560 episodes)")
+    parser = argparse.ArgumentParser(description="Armavour Full Matrix Execution Runner")
     parser.add_argument("--run-id", type=str, default=DEFAULT_RUN_ID, help="Unique identifier for matrix run.")
     parser.add_argument(
         "--batch",
         type=str,
         default="all",
-        help="Batch selection to run: e1a, spotcheck, e1b, e2, all (or comma-separated e.g. e1a,spotcheck,e2)",
+        help="Batch selection to run: e1a, spotcheck, e1b, e1, e2, e2a, e2b, all (or comma-separated e.g. e2a,e2b)",
     )
     parser.add_argument("--dry-run", action="store_true", help="Validate setup and enumerate configs without running.")
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=5,
+        help="Maximum step budget per episode (default: 5).",
+    )
     args = parser.parse_args()
+
+    if args.max_steps:
+        os.environ["CHHAL_MAX_STEPS"] = str(args.max_steps)
 
     run_id = args.run_id
     batch_arg = args.batch
@@ -717,7 +823,8 @@ def main() -> None:
         for sc in skipped_configs:
             logger.info(
                 f"  [SKIP] config_hash={sc.config_hash} pattern={sc.pattern} "
-                f"intensity={sc.intensity} language={sc.language} agent={sc.agent} "
+                f"intensity={sc.intensity} instruction_language={sc.instruction_language} "
+                f"ui_language={sc.ui_language} agent={sc.agent} "
                 f"reason=\"Already completed in Postgres\""
             )
 
@@ -743,6 +850,22 @@ def main() -> None:
 
     if args.dry_run:
         logger.info("Dry-run requested. Exiting cleanly without executing episodes.")
+        logger.info("=" * 80)
+        logger.info("DRY RUN MATRIX BREAKDOWN")
+        logger.info("=" * 80)
+        batch_groups: dict[str, list[EpisodeConfig]] = {}
+        for c in configs:
+            b_name = get_batch_name_for_config(c)
+            batch_groups.setdefault(b_name, []).append(c)
+
+        for b_name, b_configs in batch_groups.items():
+            c0 = b_configs[0]
+            logger.info(f"Batch:       {b_name}")
+            logger.info(f"Instruction: {c0.instruction_language}")
+            logger.info(f"UI:          {c0.ui_language}")
+            logger.info(f"Episodes:    {len(b_configs)}")
+            logger.info("-" * 40)
+        logger.info("=" * 80)
         sys.exit(0)
 
     # Execution State

@@ -15,7 +15,7 @@ import litellm
 from dotenv import load_dotenv
 from litellm.exceptions import RateLimitError
 
-from harness.config import EpisodeConfig, demo_configs, load_task_prompt
+from harness.config import EpisodeConfig, demo_configs, get_localized_instruction, load_task_prompt
 from harness.evaluator import EvaluationResult, evaluate
 
 DEFAULT_BASE_URL = "http://localhost:5173"
@@ -54,7 +54,7 @@ def build_episode_url(config: EpisodeConfig, *, base_url: str | None = None) -> 
         "task_id": config.task_id,
         "pattern": config.pattern,
         "intensity": config.intensity,
-        "lang": config.language,
+        "lang": config.ui_language,
         "seed": config.seed,
     }
     return f"{base}/?{urlencode(params)}"
@@ -121,13 +121,16 @@ def calculate_cost_usd(
 def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict[str, Any]:
     start_time = time.time()
     timeout_ms = int(float(os.getenv("CHHAL_EPISODE_TIMEOUT_S", str(DEFAULT_TIMEOUT_S))) * 1000)
+    canonical_task_prompt = load_task_prompt(config.task_id)
+    agent_task_prompt = get_localized_instruction(canonical_task_prompt, config.instruction_language)
+    
     row_base = _base_row(config, run_id)
+    row_base["instruction_prompt"] = agent_task_prompt
     trace: list[Any] = []
     in_tokens = 0
     out_tokens = 0
 
     try:
-        task_prompt = load_task_prompt(config.task_id)
         adapter = create_adapter(config)
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
@@ -138,7 +141,7 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                 trace, in_tokens, out_tokens = _run_adapter_with_rate_limit_retry(
                     adapter,
                     page,
-                    task_prompt,
+                    agent_task_prompt,
                     config,
                 )
                 completion_responses = getattr(adapter, "completion_responses", None)
@@ -149,7 +152,7 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                     config.pattern,
                     trace,
                     final_screen,
-                    task_prompt=task_prompt,
+                    task_prompt=canonical_task_prompt,
                     extracted_elements=extracted_elements,
                 )
             finally:
@@ -269,11 +272,14 @@ def _base_row(config: EpisodeConfig, run_id: str) -> dict[str, Any]:
         "site": config.site,
         "pattern": config.pattern,
         "intensity": config.intensity,
-        "language": config.language,
+        "language": config.ui_language,
+        "ui_language": config.ui_language,
+        "instruction_language": config.instruction_language,
         "agent": config.agent,
         "llm": config.llm,
         "seed": config.seed,
     }
+
 
 
 def _success_row(

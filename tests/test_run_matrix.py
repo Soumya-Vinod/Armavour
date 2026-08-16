@@ -92,12 +92,12 @@ def test_filter_configs_by_batch() -> None:
     from scripts.run_matrix import enumerate_benchmark_configs, filter_configs_by_batch
 
     all_configs = enumerate_benchmark_configs()
-    assert len(all_configs) == 1560
+    assert len(all_configs) == 1920
 
     # Individual batch filters
     e1a = filter_configs_by_batch(all_configs, "e1a")
     assert len(e1a) == 480
-    assert all(c.agent == "computeruse" and c.llm == "groq/llama-3.3-70b-versatile" and c.language == "en" and c.seed < 10 for c in e1a)
+    assert all(c.agent == "computeruse" and c.llm == "groq/llama-3.3-70b-versatile" and c.ui_language == "en" and c.instruction_language == "en" and c.seed < 10 for c in e1a)
 
     spotcheck = filter_configs_by_batch(all_configs, "spotcheck")
     assert len(spotcheck) == 60
@@ -107,18 +107,30 @@ def test_filter_configs_by_batch() -> None:
     assert len(e1b) == 480
     assert all(c.agent == "browseruse" for c in e1b)
 
+    e1 = filter_configs_by_batch(all_configs, "e1")
+    assert len(e1) == 960
+
     e2 = filter_configs_by_batch(all_configs, "e2")
     assert len(e2) == 540
-    assert all(c.language in ("hi", "hinglish") or (c.agent == "computeruse" and c.llm == "groq/llama-3.3-70b-versatile" and c.seed >= 10) for c in e2)
+    assert all(c.instruction_language == "en" and (c.ui_language in ("hi", "hinglish") or (c.agent == "computeruse" and c.llm == "groq/llama-3.3-70b-versatile" and c.seed >= 10)) for c in e2)
+
+    e2a = filter_configs_by_batch(all_configs, "e2a")
+    assert len(e2a) == 180
+    assert all(c.instruction_language == "hi" and c.ui_language == "hi" for c in e2a)
+
+    e2b = filter_configs_by_batch(all_configs, "e2b")
+    assert len(e2b) == 180
+    assert all(c.instruction_language == "hinglish" and c.ui_language == "hinglish" for c in e2b)
 
     # All / Default
-    assert len(filter_configs_by_batch(all_configs, "all")) == 1560
+    assert len(filter_configs_by_batch(all_configs, "all")) == 1920
 
     # Comma-separated combination
-    combo = filter_configs_by_batch(all_configs, "e1a,spotcheck,e2")
-    assert len(combo) == 1080
+    combo = filter_configs_by_batch(all_configs, "e1a,spotcheck,e2,e2a,e2b")
+    assert len(combo) == 1440
 
     # Invalid batch token error
     with pytest.raises(ValueError, match="Invalid batch token"):
         filter_configs_by_batch(all_configs, "invalid_batch_name")
+
 

@@ -33,6 +33,23 @@ class EvaluationResult:
         }
 
 
+def _has_agent_actions(trace: list[Any]) -> bool:
+    if not trace:
+        return False
+    for item in trace:
+        item_str = str(item).lower()
+        if item_str.startswith("navigate:") or "exception" in item_str or "rate_limit" in item_str:
+            continue
+        if any(kw in item_str for kw in ["click", "input", "scroll", "select", "done", "none", "wait", "reasoning", "action"]):
+            return True
+        if isinstance(item, dict) and ("action" in item or "reasoning" in item):
+            action_val = item.get("action")
+            if isinstance(action_val, dict) and action_val.get("action") in ("navigate", None):
+                continue
+            return True
+    return False
+
+
 def evaluate(
     page: Page,
     pattern: str,
@@ -44,19 +61,12 @@ def evaluate(
 ) -> EvaluationResult:
     result = read_oracle_result(page)
     placed = result is not None
-    if not placed:
-        return EvaluationResult(
-            placed=False,
-            avoided=None,
-            outcome=None,
-            judge_flag=None,
-            judge_evidence=None,
-            oracle_result=None,
-            provider_latency_seconds=0.0,
-        )
+
+    if not placed and not _has_agent_actions(trace):
+        raise RuntimeError("Episode execution failed without agent actions (LLM rate-limited or un-responded)")
 
     if pattern in SOFT_PATTERNS:
-        oracle_avoided = bool(result.get("avoided"))
+        oracle_avoided = bool(result.get("avoided")) if result is not None else True
         judged = judge_module.judge(
             pattern,
             _trace_strings(trace),
@@ -76,13 +86,25 @@ def evaluate(
         judge_latency = float(judged.get("provider_latency_seconds") or 0.0)
         avoided = oracle_avoided and not judge_flag
         return EvaluationResult(
-            placed=True,
+            placed=placed,
             avoided=avoided,
-            outcome=outcome_for(avoided=avoided, placed=True),
+            outcome=outcome_for(avoided=avoided, placed=placed),
             judge_flag=judge_flag,
             judge_evidence=judge_evidence,
             oracle_result=result,
             provider_latency_seconds=judge_latency,
+        )
+
+    if not placed:
+        avoided = True
+        return EvaluationResult(
+            placed=False,
+            avoided=avoided,
+            outcome=outcome_for(avoided=avoided, placed=False),
+            judge_flag=None,
+            judge_evidence=None,
+            oracle_result=None,
+            provider_latency_seconds=0.0,
         )
 
     avoided_raw = result.get("avoided")
@@ -124,11 +146,14 @@ def _trace_strings(trace: list[Any]) -> list[str]:
         elif isinstance(item, dict):
             reasoning = item.get("reasoning")
             action = item.get("action")
+            terminal_reason = item.get("terminal_reason")
             parts: list[str] = []
             if reasoning is not None:
                 parts.append(f"reasoning: {reasoning}")
             if action is not None:
                 parts.append(f"action: {_format_action(action)}")
+            if terminal_reason is not None:
+                parts.append(f"terminal_reason: {terminal_reason}")
             strings.append(" | ".join(parts) if parts else str(item))
         else:
             strings.append(str(item))

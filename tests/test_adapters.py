@@ -163,6 +163,64 @@ def test_computeruse_normal_checked_checkbox_uncheck_still_toggles(
     assert not any("'event': 'checkbox_noop'" in record.message for record in caplog.records)
 
 
+@pytest.mark.parametrize(
+    ("action_dict", "expected_reason", "expected_log"),
+    [
+        ({"reasoning": "done now", "action": "done"}, "explicit_done", "Terminal completion via explicit 'done' action"),
+        ({"reasoning": "finish now", "action": "finish"}, "explicit_finish", "Terminal completion via explicit 'finish' action"),
+        ({"reasoning": "stop now", "action": "stop"}, "explicit_stop", "Terminal completion via explicit 'stop' action"),
+        ({"reasoning": "none action", "action": "none"}, "action_none", "Terminal completion due to action='none'"),
+    ],
+)
+def test_computeruse_terminal_action_reasons(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    action_dict: dict[str, Any],
+    expected_reason: str,
+    expected_log: str,
+) -> None:
+    monkeypatch.setattr(computeruse, "extract_elements", lambda _p: ([], {}))
+    monkeypatch.setattr(
+        computeruse.Adapter,
+        "_next_action",
+        lambda _self, _t, _c, _e, _tr: (action_dict, {"in_tokens": 5, "out_tokens": 2}),
+    )
+
+    with caplog.at_level(logging.INFO, logger="harness.adapters.computeruse"):
+        trace, in_tokens, out_tokens = computeruse.Adapter(model="model", max_steps=1).run(
+            FakeRunnerPage(), "task", config()
+        )
+
+    assert len(trace) == 1
+    assert trace[0]["terminal_reason"] == expected_reason
+    assert any(expected_log in record.message for record in caplog.records)
+
+
+def test_computeruse_invalid_action_index_terminal_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Next action returns click on non-existent index 99
+    monkeypatch.setattr(computeruse, "extract_elements", lambda _p: ([], {}))
+    monkeypatch.setattr(
+        computeruse.Adapter,
+        "_next_action",
+        lambda _self, _t, _c, _e, _tr: (
+            {"reasoning": "bad click", "action": "click", "index": 99},
+            {"in_tokens": 2, "out_tokens": 1},
+        ),
+    )
+
+    with caplog.at_level(logging.INFO, logger="harness.adapters.computeruse"):
+        trace, _, _ = computeruse.Adapter(model="model", max_steps=1).run(
+            FakeRunnerPage(), "task", config()
+        )
+
+    assert len(trace) == 1
+    assert trace[0]["terminal_reason"] == "invalid_action_index"
+    assert any("Terminal completion due to invalid action index" in record.message for record in caplog.records)
+
+
 def config() -> SimpleNamespace:
     return SimpleNamespace(llm="model")
 
@@ -179,9 +237,10 @@ class FakeRunnerPage:
 
 def fake_browser_use_module() -> SimpleNamespace:
     class FakeBrowserSession:
-        def __init__(self, *, keep_alive: bool) -> None:
+        def __init__(self, *, keep_alive: bool = True, **kwargs: Any) -> None:
             self.keep_alive = keep_alive
             self.killed = False
+            self.kwargs = kwargs
 
         async def must_get_current_page(self) -> FakeInternalPage:
             assert self.keep_alive is True
@@ -196,10 +255,11 @@ def fake_browser_use_module() -> SimpleNamespace:
             self.kwargs = kwargs
 
     class FakeAgent:
-        def __init__(self, *, task: str, llm: FakeChatLiteLLM, browser_session: FakeBrowserSession) -> None:
+        def __init__(self, *, task: str, llm: FakeChatLiteLLM, browser_session: FakeBrowserSession, **kwargs: Any) -> None:
             self.task = task
             self.llm = llm
             self.browser_session = browser_session
+            self.kwargs = kwargs
             self.state = SimpleNamespace(n_steps=1)
             self.history = FakeHistory()
 
@@ -233,3 +293,57 @@ class FakeHistory:
 
     def last_action(self) -> dict[str, Any]:
         return {"click": {"index": 1}}
+
+
+def test_browseruse_adapter_groq_llm_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    created_agents = []
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+    class FakeBrowserSession:
+        def __init__(self, keep_alive: bool = True, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+        async def must_get_current_page(self) -> Any:
+            return FakeInternalPage()
+
+        async def kill(self) -> None:
+            pass
+
+    class FakeAgent:
+        def __init__(self, *, task: str, llm: Any, browser_session: Any, use_vision: bool = True, **kwargs: Any) -> None:
+            self.task = task
+            self.llm = llm
+            self.browser_session = browser_session
+            self.use_vision = use_vision
+            self.kwargs = kwargs
+            self.state = SimpleNamespace(n_steps=1)
+            self.history = FakeHistory()
+            created_agents.append(self)
+
+        async def run(self, *, max_steps: int, on_step_start: Any, on_step_end: Any) -> FakeHistory:
+            return self.history
+
+    monkeypatch.setattr(browseruse, "_load_browser_use", lambda: SimpleNamespace(
+        Agent=FakeAgent,
+        BrowserSession=FakeBrowserSession,
+        ChatLiteLLM=None,
+    ))
+    monkeypatch.setattr("browser_use.llm.ChatOpenAI", FakeChatOpenAI)
+
+    browseruse.Adapter(model="groq/llama-3.3-70b-versatile", max_steps=2).run(
+        FakeRunnerPage(), "task", SimpleNamespace(llm="groq/llama-3.3-70b-versatile")
+    )
+
+    assert len(created_agents) == 1
+    agent_inst = created_agents[0]
+    assert agent_inst.use_vision is False
+    assert agent_inst.llm.kwargs["model"] == "llama-3.3-70b-versatile"
+    assert agent_inst.llm.kwargs["base_url"] == "https://api.groq.com/openai/v1"
+    assert agent_inst.llm.kwargs["add_schema_to_system_prompt"] is True
+    assert agent_inst.llm.kwargs["dont_force_structured_output"] is True
+    assert agent_inst.llm.kwargs["remove_min_items_from_schema"] is True
+    assert agent_inst.llm.kwargs["remove_defaults_from_schema"] is True
+    assert agent_inst.kwargs.get("flash_mode") is True

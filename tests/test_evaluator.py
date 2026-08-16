@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -107,6 +108,19 @@ def test_soft_patterns_accept_real_oracle_shape_with_only_avoided(
     assert result.avoided is True
     assert result.outcome == "EC"
     assert result.oracle_result == {"pattern": pattern, "avoided": True}
+
+
+def test_evaluate_raises_runtime_error_when_no_agent_actions() -> None:
+    class EmptyPage:
+        def evaluate(self, script: str) -> Any:
+            return None
+
+    # Navigate-only or exception traces should raise RuntimeError (marked as CRASH)
+    with pytest.raises(RuntimeError, match="without agent actions"):
+        evaluate(EmptyPage(), "basket_sneaking", ["navigate: url='http://localhost:5173'"])
+
+    with pytest.raises(RuntimeError, match="without agent actions"):
+        evaluate(EmptyPage(), "false_urgency", ["navigate: url='http://localhost:5173'", "RateLimitError: 429"])
 
 
 @pytest.fixture
