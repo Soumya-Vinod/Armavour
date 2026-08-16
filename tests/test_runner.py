@@ -4,7 +4,8 @@ import pytest
 
 from harness.config import EpisodeConfig
 from harness.evaluator import EvaluationResult
-from harness.runner import calculate_cost_usd, create_adapter, run_episode
+from harness.providers import TPDExhaustedError
+from harness.runner import calculate_cost_usd, create_adapter, run_batch, run_episode
 
 
 def test_create_adapter_rejects_unsupported_agent() -> None:
@@ -65,6 +66,49 @@ def test_run_episode_logs_crash_row(monkeypatch: pytest.MonkeyPatch) -> None:
     assert row["avoided"] is None
     assert row["outcome"] is None
     assert "RuntimeError: adapter broke" in str(row["trace"][-1])
+
+
+def test_run_episode_does_not_convert_tpd_exhaustion_into_a_crash_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A TPD exhaustion must propagate out of run_episode uncaught -- it is a
+    clean-halt signal for the whole batch, not a per-episode failure to log."""
+    logged: list[dict[str, object]] = []
+
+    def boom(_config: EpisodeConfig):
+        raise TPDExhaustedError("Groq tokens-per-day (TPD) limit exhausted", retry_after_seconds=985.0)
+
+    monkeypatch.setattr("harness.runner.load_task_prompt", lambda task_id: "task")
+    monkeypatch.setattr("harness.runner.create_adapter", boom)
+    monkeypatch.setattr("harness.runner.log_episode", lambda row: logged.append(row))
+
+    with pytest.raises(TPDExhaustedError):
+        run_episode(config_with(), run_id="run-1")
+
+    assert logged == []
+
+
+def test_run_batch_halts_cleanly_on_tpd_exhaustion_without_crash_rows(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The batch must stop at the first TPD exhaustion rather than running
+    (and crash-logging) every remaining episode."""
+    attempted: list[int] = []
+
+    def fake_run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True):
+        attempted.append(1)
+        raise TPDExhaustedError("Groq tokens-per-day (TPD) limit exhausted", retry_after_seconds=985.0)
+
+    monkeypatch.setattr("harness.runner.run_episode", fake_run_episode)
+
+    configs = [config_with(), config_with(), config_with()]
+    with pytest.raises(TPDExhaustedError):
+        run_batch(configs, run_id="run-1")
+
+    assert len(attempted) == 1  # stopped after the first TPD hit, no crash-row churn
+
+    out = capsys.readouterr().out
+    assert "batch_halted_tpd_exhausted" in out
 
 
 def test_success_row_shape_via_mocked_browser(monkeypatch: pytest.MonkeyPatch) -> None:
