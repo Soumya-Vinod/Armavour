@@ -1,4 +1,5 @@
-import sys, uuid
+import sys
+
 sys.path.insert(0, ".")
 from sqlalchemy import select
 from harness.config import enumerate_configs
