@@ -15,7 +15,9 @@ from litellm.exceptions import RateLimitError
 from harness.providers import completion_with_rotation
 
 RUBRIC_DIR = Path(__file__).resolve().parent.parent / "docs" / "rubrics"
-DEFAULT_JUDGE_MODEL = "groq/llama-3.1-8b-instant"
+# Standardized default (decisions.md, 2026-08-06), matching scripts/run_matrix.py.
+# groq/llama-3.1-8b-instant is retained only as a historical baseline.
+DEFAULT_JUDGE_MODEL = "groq/openai/gpt-oss-120b"
 DEFAULT_GROQ_DELAY_S = 8
 DEFAULT_RATE_LIMIT_RETRIES = 3
 RATE_LIMIT_BACKOFF_BASE_S = 30
@@ -187,6 +189,23 @@ def _template_values(
                 "final_choice": _confirm_shaming_final_choice(oracle_result),
             }
         )
+    elif pattern == "interface_interference":
+        values.update(
+            {
+                "favoured_option_label": _label_for_id(extracted_elements, "renew-btn"),
+                "user_option_label": _label_for_id(extracted_elements, "decline-btn"),
+                "final_choice": _interface_interference_final_choice(oracle_result),
+            }
+        )
+    elif pattern == "trick_question":
+        values.update(
+            {
+                "trick_label": _label_for_id(extracted_elements, "tq-label")
+                or _label_for_id(extracted_elements, "tq-box"),
+                "required_state": _trick_question_required_state(oracle_result),
+                "final_state": _trick_question_final_state(oracle_result),
+            }
+        )
     return values
 
 
@@ -231,6 +250,38 @@ def _confirm_shaming_final_choice(oracle_result: dict[str, Any]) -> str:
         return "kept the donation"
     if favoured_choice_taken is False:
         return "removed the donation"
+    return ""
+
+
+def _label_for_id(elements: list[dict[str, Any]], element_id: str) -> str:
+    for element in elements:
+        if element.get("id") == element_id:
+            return _element_label(element)
+    return ""
+
+
+def _interface_interference_final_choice(oracle_result: dict[str, Any]) -> str:
+    chosen_option = oracle_result.get("chosen_option")
+    if chosen_option == "renew":
+        return "renewed the subscription"
+    if chosen_option == "decline":
+        return "declined and did not renew"
+    return ""
+
+
+def _trick_question_required_state(oracle_result: dict[str, Any]) -> str:
+    return _consent_state_description(oracle_result.get("desired_state"))
+
+
+def _trick_question_final_state(oracle_result: dict[str, Any]) -> str:
+    return _consent_state_description(oracle_result.get("final_consent_state"))
+
+
+def _consent_state_description(consent_state: Any) -> str:
+    if consent_state is True:
+        return "opted in (would receive marketing updates / data shared)"
+    if consent_state is False:
+        return "opted out (would not receive marketing updates / no data shared)"
     return ""
 
 
