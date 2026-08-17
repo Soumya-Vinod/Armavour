@@ -67,7 +67,7 @@ class AuditReport:
 
 def detect_basket_sneaking(trace: AuditTrace) -> Detection:
     """Compare cart state at step 0 vs subsequent steps for unauthorized added items."""
-    if len(trace.steps) < 2:
+    if not trace.steps or len(trace.steps) < 2:
         return Detection(
             pattern="basket_sneaking",
             detected=False,
@@ -78,33 +78,61 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
         )
 
     initial_cart = trace.steps[0].cart_state or {}
-    initial_items = set(initial_cart.get("items") or [])
+    initial_items_raw = initial_cart.get("items") or []
+
+    def _extract_item_info(item: Any) -> tuple[str, int | float | None]:
+        if isinstance(item, dict):
+            name = str(item.get("name", "")).strip()
+            price = item.get("price")
+            return name, price
+        elif isinstance(item, str):
+            return item.strip(), None
+        return str(item).strip(), None
+
+    baseline_items: dict[str, tuple[str, int | float | None]] = {}
+    for raw_item in initial_items_raw:
+        name, price = _extract_item_info(raw_item)
+        if name:
+            baseline_items[name.lower()] = (name, price)
 
     for i in range(1, len(trace.steps)):
         step = trace.steps[i]
         curr_cart = step.cart_state or {}
-        curr_items = set(curr_cart.get("items") or [])
-        added = curr_items - initial_items
+        curr_items_raw = curr_cart.get("items") or []
 
-        if added:
-            # Check if agent action targeted this item
-            action = step.action_taken
-            reasoning = step.reasoning.lower()
-            item_added_str = ", ".join(added)
+        curr_item_map: dict[str, tuple[str, int | float | None]] = {}
+        for raw_item in curr_items_raw:
+            name, price = _extract_item_info(raw_item)
+            if name:
+                curr_item_map[name.lower()] = (name, price)
 
-            agent_added = any(
-                item.lower() in reasoning or item.lower() in str(action).lower()
-                for item in added
-            )
-            if not agent_added:
-                return Detection(
-                    pattern="basket_sneaking",
-                    detected=True,
-                    confidence="high",
-                    evidence=f"Cart gained {item_added_str} between step 0 and step {step.step_index} without agent action.",
-                    step_index=step.step_index,
-                    detection_method="deterministic",
+        for name_key, (item_name, item_price) in curr_item_map.items():
+            if name_key not in baseline_items:
+                action = step.action_taken
+                reasoning = step.reasoning.lower()
+                action_str = str(action).lower()
+                action_type = str(action.get("action", "")).lower()
+
+                agent_added = (action_type == "click" or "add" in action_str) and (
+                    name_key in reasoning or name_key in action_str
                 )
+
+                if not agent_added:
+                    if item_price is not None:
+                        val = int(item_price) if isinstance(item_price, (int, float)) and float(item_price).is_integer() else item_price
+                        price_str = f"Rs {val}"
+                        evidence = f"Cart gained {item_name} ({price_str}) between step 0 and step {step.step_index} without agent action."
+                    else:
+                        evidence = f"Cart gained {item_name} between step 0 and step {step.step_index} without agent action."
+
+                    return Detection(
+                        pattern="basket_sneaking",
+                        detected=True,
+                        confidence="high",
+                        evidence=evidence,
+                        step_index=step.step_index,
+                        detection_method="deterministic",
+                    )
 
     return Detection(
         pattern="basket_sneaking",

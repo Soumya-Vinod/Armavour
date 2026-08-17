@@ -87,16 +87,31 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                 let total = null;
                 let items = [];
 
-                // Attempt to read window.__ARMAVOUR_CART__ or window.cart if available
+                // Attempt to read window.__ARMAVOUR_CART__ if available
                 if (window.__ARMAVOUR_CART__) {
-                    return window.__ARMAVOUR_CART__;
+                    const rawCart = window.__ARMAVOUR_CART__;
+                    if (rawCart && typeof rawCart === 'object') {
+                        let cartTotal = rawCart.total !== undefined ? rawCart.total : null;
+                        let cartItems = [];
+                        if (Array.isArray(rawCart.items)) {
+                            cartItems = rawCart.items.map(it => {
+                                if (typeof it === 'string') {
+                                    return { name: it, price: null };
+                                } else if (it && typeof it === 'object') {
+                                    return { name: it.name || String(it), price: typeof it.price === 'number' ? it.price : null };
+                                }
+                                return { name: String(it), price: null };
+                            });
+                        }
+                        return { total: cartTotal, items: cartItems };
+                    }
                 }
 
                 // Look for price elements with id/class containing total, subtotal, price
-                const totalElements = Array.from(document.querySelectorAll('#total, .total, .subtotal, [id*="total"], [class*="total"]'));
+                const totalElements = Array.from(document.querySelectorAll('#total, .total, .subtotal, [id*="total"], [class*="total"], [id*="subtotal"], [class*="subtotal"]'));
                 for (const el of totalElements) {
                     const text = (el.innerText || '').trim();
-                    const match = text.match(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)?(\\d+(?:,\\d+)*(?:\\.\\d+)?)/i);
+                    const match = text.match(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)(\\d+(?:,\\d+)*(?:\\.\\d+)?)/i);
                     if (match) {
                         const parsedVal = parseFloat(match[1].replace(/,/g, ''));
                         if (!isNaN(parsedVal) && parsedVal > 0) {
@@ -106,25 +121,112 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                     }
                 }
 
-                // Look for cart items
-                const itemElements = Array.from(document.querySelectorAll('.cart-item, .item, [data-item], [id*="cart-item"]'));
-                for (const itemEl of itemElements) {
-                    const text = (itemEl.innerText || '').trim();
-                    if (text) {
-                        items.push(text.split('\\n')[0]);
+                // Look for cart containers and item elements
+                const itemSelectors = [
+                    '[data-item]',
+                    '[data-product]',
+                    '[data-cart-item]',
+                    '[data-line-item]',
+                    '.cart-item',
+                    '.order-item',
+                    '.checkout-item',
+                    '.product-item',
+                    '.line',
+                    '[class*="cart-item"]',
+                    '[class*="order-item"]',
+                    '[class*="summary-line"]',
+                    '[class*="line"]',
+                    'li',
+                    'tr'
+                ];
+
+                const containers = Array.from(document.querySelectorAll('#cart, .cart, #order-summary, .order-summary, aside, [class*="cart"], [class*="summary"]'));
+                let candidates = [];
+
+                if (containers.length > 0) {
+                    for (const c of containers) {
+                        for (const sel of itemSelectors) {
+                            const found = Array.from(c.querySelectorAll(sel));
+                            candidates.push(...found);
+                        }
+                    }
+                } else {
+                    for (const sel of ['[data-item]', '[data-product]', '[data-cart-item]', '[data-line-item]', '.cart-item', '[id*="cart-item"]', '.line']) {
+                        candidates.push(...Array.from(document.querySelectorAll(sel)));
                     }
                 }
 
-                if (total !== null || items.length > 0) {
-                    return { total: total, items: items };
+                const seenNames = new Set();
+                for (const el of candidates) {
+                    if (el.id === 'total' || el.classList.contains('total') || el.classList.contains('subtotal')) {
+                        continue;
+                    }
+                    const text = (el.innerText || '').trim();
+                    if (!text) continue;
+
+                    if (/^(total|subtotal|order summary|your booking)/i.test(text)) {
+                        continue;
+                    }
+
+                    let itemPrice = null;
+                    const priceMatch = text.match(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)(\\d+(?:,\\d+)*(?:\\.\\d+)?)/i);
+                    if (priceMatch) {
+                        const pv = parseFloat(priceMatch[1].replace(/,/g, ''));
+                        if (!isNaN(pv)) {
+                            itemPrice = pv;
+                        }
+                    }
+
+                    let namePart = text.split('\\n')[0].trim();
+                    namePart = namePart.replace(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)\\d+(?:,\\d+)*(?:\\.\\d+)?/gi, '').trim();
+                    namePart = namePart.replace(/^[-:\\s]+|[-:\\s]+$/g, '').trim();
+
+                    if (!namePart) {
+                        namePart = text.split('\\n')[0].trim();
+                    }
+
+                    const nameKey = namePart.toLowerCase();
+                    if (nameKey && !seenNames.has(nameKey) && nameKey !== 'total' && nameKey !== 'subtotal') {
+                        seenNames.add(nameKey);
+                        items.push({ name: namePart, price: itemPrice });
+                    }
                 }
-                return null;
+
+                return { total: total, items: items };
             }"""
         )
-        return cart_info
+        if not cart_info or not isinstance(cart_info, dict):
+            logger.warning("cart_state_parse_empty: returned empty or non-dict result")
+            return {"total": None, "items": []}
+
+        total = cart_info.get("total")
+        if total is not None and isinstance(total, (int, float)):
+            total = int(total) if float(total).is_integer() else float(total)
+        else:
+            total = None
+
+        raw_items = cart_info.get("items") or []
+        formatted_items: list[dict[str, Any]] = []
+        for it in raw_items:
+            if isinstance(it, dict):
+                name = str(it.get("name", "")).strip()
+                price = it.get("price")
+                if price is not None and isinstance(price, (int, float)):
+                    price = int(price) if float(price).is_integer() else float(price)
+                else:
+                    price = None
+                if name:
+                    formatted_items.append({"name": name, "price": price})
+            elif isinstance(it, str) and it.strip():
+                formatted_items.append({"name": it.strip(), "price": None})
+
+        if not formatted_items:
+            logger.warning("cart_state_parse_empty: no items parsed from DOM")
+
+        return {"total": total, "items": formatted_items}
     except Exception as exc:
-        logger.debug("cart_state_parse_failed: %s", exc)
-        return None
+        logger.warning("cart_state_parse_failed: %s", exc)
+        return {"total": None, "items": []}
 
 
 def run_audit(
