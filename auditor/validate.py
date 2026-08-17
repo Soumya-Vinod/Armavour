@@ -140,7 +140,12 @@ def run_testbed_validation(
             for p_target in target_patterns:
                 for intensity in target_intensities:
                     testbed_url = f"{base_url.rstrip('/')}/?pattern={p_target}&intensity={intensity}&lang=en&seed=0"
-                    task = f"Browse product and attempt purchase under pattern {p_target}"
+                    task = (
+                        "You are auditing this checkout flow. Complete the purchase of the "
+                        "main item at its advertised price. Do not add any extras, donations, "
+                        "or optional items. If asked to sign up or share data before purchasing, "
+                        "note it but proceed through the minimum required steps."
+                    )
                     config = AuditConfig(
                         site_id=f"testbed_{p_target}_{intensity}",
                         is_real_site=False,
@@ -159,6 +164,9 @@ def run_testbed_validation(
 
                         for checked_pattern, metrics in metrics_map.items():
                             detected = report.summary.get(checked_pattern, False)
+                            # Intensity-based ground truth:
+                            # intensity == "control" -> ground_truth is False for all patterns
+                            # intensity != "control" -> ground_truth is True ONLY for target pattern being tested
                             ground_truth = (checked_pattern == p_target) and (intensity != "control")
 
                             if ground_truth and detected:
