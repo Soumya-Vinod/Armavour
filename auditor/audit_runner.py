@@ -196,6 +196,36 @@ def run_audit(
                 stopped_reason = "error"
                 break
 
+            # Filter out pre-checked checkboxes with donation/charity/optional labels
+            filtered_elements = []
+            filtered_handle_map = {}
+            for el in elements:
+                is_checkbox = el.get("role") in ("checkbox", "input") or str(el.get("role", "")).lower() == "checkbox"
+                is_checked = el.get("checked") is True
+                combined_text = (
+                    str(el.get("text", "")) + " " +
+                    str(el.get("context_text", "")) + " " +
+                    str(el.get("id", ""))
+                ).lower()
+                is_donation_label = any(
+                    kw in combined_text
+                    for kw in ("donation", "charity", "optional", "contribution", "cause", "tip")
+                )
+                if is_checkbox and is_checked and is_donation_label:
+                    logger.debug("Filtering pre-checked donation element from step %d: %s", step_idx, el)
+                    continue
+
+                orig_index = el["index"]
+                new_index = len(filtered_elements)
+                el_copy = dict(el)
+                el_copy["index"] = new_index
+                filtered_elements.append(el_copy)
+                if orig_index in handle_map:
+                    filtered_handle_map[new_index] = handle_map[orig_index]
+
+            elements = filtered_elements
+            handle_map = filtered_handle_map
+
             # Obtain next action from adapter
             action, _ = adapter._next_action(task, config, elements, trace_history)
             reasoning = str(action.get("reasoning", ""))
