@@ -67,7 +67,7 @@ class AuditReport:
 
 def detect_basket_sneaking(trace: AuditTrace) -> Detection:
     """Compare cart state at step 0 vs subsequent steps for unauthorized added items."""
-    if not trace.steps or len(trace.steps) < 2:
+    if not trace.steps:
         return Detection(
             pattern="basket_sneaking",
             detected=False,
@@ -77,8 +77,7 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
             detection_method="deterministic",
         )
 
-    initial_cart = trace.steps[0].cart_state or {}
-    initial_items_raw = initial_cart.get("items") or []
+    sneaked_keywords = ("donation", "charity", "contribution", "tip", "warranty", "protection", "insurance")
 
     def _extract_item_info(item: Any) -> tuple[str, int | float | None]:
         if isinstance(item, dict):
@@ -89,8 +88,27 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
             return item.strip(), None
         return str(item).strip(), None
 
+    step0_cart = trace.steps[0].cart_state or {}
+    step0_items = step0_cart.get("items") or []
+
+    # 1. Check if step 0 cart already contains a pre-sneaked item (e.g. pre-selected donation)
+    for raw_item in step0_items:
+        name, price = _extract_item_info(raw_item)
+        if any(kw in name.lower() for kw in sneaked_keywords):
+            price_val = int(price) if isinstance(price, (int, float)) and float(price).is_integer() else price
+            price_str = f" (Rs {price_val})" if price is not None else ""
+            return Detection(
+                pattern="basket_sneaking",
+                detected=True,
+                confidence="high",
+                evidence=f"Cart gained {name}{price_str} at step 0 without agent action.",
+                step_index=0,
+                detection_method="deterministic",
+            )
+
+    # 2. Baseline comparison: check if subsequent steps gained items not in step 0
     baseline_items: dict[str, tuple[str, int | float | None]] = {}
-    for raw_item in initial_items_raw:
+    for raw_item in step0_items:
         name, price = _extract_item_info(raw_item)
         if name:
             baseline_items[name.lower()] = (name, price)
@@ -327,23 +345,28 @@ def detect_nagging(trace: AuditTrace) -> Detection:
 
 def detect_subscription_trap(trace: AuditTrace) -> Detection:
     """Scan checkout steps for pre-selected recurring billing options."""
-    recurring_keywords = ("monthly", "annually", "recurring", "auto-renew", "subscription")
-    checked_input_regex = re.compile(r'<input[^>]+(?:checked|type=["\']radio["\']|type=["\']checkbox["\'])[^>]*>', re.IGNORECASE)
+    recurring_keywords = ("monthly", "annually", "recurring", "auto-renew", "subscription", "per month", "per year")
+    checked_input_regex = re.compile(
+        r'<input[^>]+(?:checked|type=["\']radio["\']|type=["\']checkbox["\'])[^>]*>',
+        re.IGNORECASE,
+    )
 
     for step in trace.steps:
-        dom_lower = step.dom_snapshot.lower()
-        if any(kw in dom_lower for kw in recurring_keywords):
-            inputs = checked_input_regex.findall(step.dom_snapshot)
-            for inp in inputs:
-                if "checked" in inp.lower():
-                    return Detection(
-                        pattern="subscription_trap",
-                        detected=True,
-                        confidence="high",
-                        evidence=f"Pre-selected recurring billing option found in DOM at step {step.step_index}.",
-                        step_index=step.step_index,
-                        detection_method="deterministic",
-                    )
+        inputs = checked_input_regex.findall(step.dom_snapshot)
+        for inp in inputs:
+            if "checked" in inp.lower():
+                pos = step.dom_snapshot.find(inp)
+                if pos != -1:
+                    snippet = step.dom_snapshot[max(0, pos - 250) : min(len(step.dom_snapshot), pos + 350)].lower()
+                    if any(kw in snippet for kw in recurring_keywords):
+                        return Detection(
+                            pattern="subscription_trap",
+                            detected=True,
+                            confidence="high",
+                            evidence=f"Pre-selected recurring billing option found in DOM at step {step.step_index}.",
+                            step_index=step.step_index,
+                            detection_method="deterministic",
+                        )
 
     return Detection(
         pattern="subscription_trap",
@@ -533,3 +556,8 @@ def detect_violations(trace: AuditTrace) -> AuditReport:
         detections=detections,
         summary=summary,
     )
+
+
+def detect_all(trace: AuditTrace) -> AuditReport:
+    """Alias for detect_violations to run all pattern detectors on an AuditTrace."""
+    return detect_violations(trace)
