@@ -218,6 +218,21 @@ def is_rate_limit_error(exc: Exception) -> bool:
     return any(kw in msg or kw in exc_type for kw in RATE_LIMIT_ERROR_KEYWORDS)
 
 
+def _infer_provider_and_env(model: str, default_provider: str = "groq", default_env: str = "GROQ_API_KEY") -> tuple[str, str]:
+    m_lower = str(model or "").lower()
+    if m_lower.startswith("openrouter/"):
+        return "openrouter", "OPENROUTER_API_KEY"
+    if m_lower.startswith("anthropic/"):
+        return "anthropic", "ANTHROPIC_API_KEY"
+    if m_lower.startswith("gemini/"):
+        return "gemini", "GEMINI_API_KEY"
+    if m_lower.startswith("openai/"):
+        return "openai", "OPENAI_API_KEY"
+    if m_lower.startswith("groq/"):
+        return "groq", "GROQ_API_KEY"
+    return default_provider, default_env
+
+
 def completion_with_rotation(
     model: str,
     messages: list[dict[str, Any]],
@@ -229,7 +244,8 @@ def completion_with_rotation(
 ) -> Any:
     """Execute litellm.completion with automatic API key rotation on rate limits."""
     if pool is None:
-        pool = get_key_pool(provider=provider, env_var=env_var)
+        p_name, p_env = _infer_provider_and_env(model, provider, env_var)
+        pool = get_key_pool(provider=p_name, env_var=p_env)
 
     attempted = 0
     total_keys = pool.total_keys()
