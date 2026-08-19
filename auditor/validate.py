@@ -12,6 +12,12 @@ from auditor.detector import ALL_PATTERNS, detect_violations
 from harness.adapters.computeruse import Adapter
 from playwright.sync_api import sync_playwright
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 VALIDATION_PATTERNS = ALL_PATTERNS

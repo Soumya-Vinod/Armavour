@@ -19,6 +19,12 @@ from auditor.field import (
 from auditor.storage import generate_timestamp_id
 from harness.extract import PageExtractionError, extract_elements
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 
