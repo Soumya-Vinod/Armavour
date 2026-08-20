@@ -585,7 +585,24 @@ def _is_rubric_available(pattern: str) -> bool:
 
 
 def _run_judge_detector(pattern: str, trace: AuditTrace, candidate_steps: list[AuditStep]) -> Detection:
-    """Safely run LLM judge on candidate steps for a given pattern (handles missing rubrics)."""
+    """Safely run LLM judge on candidate steps for a given pattern (handles missing/pending rubrics)."""
+    rubric_path = Path("docs/rubrics") / f"{pattern}.md"
+    if rubric_path.exists():
+        try:
+            content = rubric_path.read_text(encoding="utf-8").strip()
+            if "STATUS: PENDING" in content:
+                logger.info("Rubric status is PENDING for pattern %s; skipping judge LLM call", pattern)
+                return Detection(
+                    pattern=pattern,
+                    detected=False,
+                    confidence="low",
+                    evidence=f"rubric_pending: {pattern}",
+                    step_index=0,
+                    detection_method="judge",
+                )
+        except Exception:
+            pass
+
     if not _is_rubric_available(pattern):
         logger.info("Rubric not available or pending for pattern %s; skipping judge LLM call", pattern)
         return Detection(
