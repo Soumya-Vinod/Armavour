@@ -71,6 +71,79 @@ LANGUAGE_CONDITIONS: list[tuple[str, str, str]] = [
     ("hi instruction + hi UI", "hi", "hi"),
 ]
 
+# --- instruction_language derivation for pre-migration-0005 data ----------
+#
+# migration 0005_add_instruction_language (part of the E2a/E2b runner-support
+# commit) added `instruction_language`/`ui_language` as their own columns.
+# The real matrix run (run_id=matrix-full-e1e2, restored from
+# pgdump_armavour_e1_e2.sql) predates that migration -- the dump was taken
+# 2026-08-16 11:04, the migration file is timestamped 2026-08-16 11:19 -- so
+# the episodes table it came from only ever had a single `language` column
+# (== ui_language; instruction_language was computed in-memory per episode
+# but never persisted). Without it, hi/hinglish rows are ambiguous between
+# E2 (English instruction, non-English UI) and E2a/E2b (matched
+# instruction+UI), which share the same `language` value.
+#
+# It is recoverable for this run only, from seed + created_at, which are
+# both persisted: the language-arm rows split into disjoint, date-clustered
+# seed blocks --
+#   seed 10-19, created 2026-08-08 -> English instruction  (E2)
+#   seed 20-29 (hi) / 30-39 (hinglish), created 2026-08-12 -> matched
+#     instruction+UI (E2a / E2b) -- run four days later, hence the
+#     disjoint seed_start in the config generator
+# -- confirmed both by an exact 08-08/08-12 date split on those exact seed
+# boundaries, and independently by the fact that this mapping reproduces
+# the paper's Table IV DC rates exactly (en/hi 30.0%, hi/hi 66.7%,
+# en/hinglish 22.2%, hinglish/hinglish 25.0%). It is a fact about this one
+# historical run, not a general fallback -- a row with hi/hinglish UI and a
+# seed outside these blocks has no known instruction_language and is a hard
+# error, not a guess.
+E2_EN_INSTRUCTION_SEED_RANGE = range(10, 20)
+E2A_HI_INSTRUCTION_SEED_RANGE = range(20, 30)
+E2B_HINGLISH_INSTRUCTION_SEED_RANGE = range(30, 40)
+
+
+def _derive_instruction_language(row: pd.Series) -> str:
+    """Recover instruction_language for rows where it was never persisted.
+
+    See the E2_*_SEED_RANGE comment above -- this is a documented, verified
+    derivation for run_id=matrix-full-e1e2 specifically, not a general
+    fallback. Raises if a hi/hinglish row falls outside the known seed
+    blocks, so a future/different run can't silently get mislabelled.
+    """
+    ui_lang = row["ui_language"]
+    seed = int(row["seed"])
+    if ui_lang == "en":
+        return "en"
+    if ui_lang == "hi":
+        if seed in E2_EN_INSTRUCTION_SEED_RANGE:
+            return "en"
+        if seed in E2A_HI_INSTRUCTION_SEED_RANGE:
+            return "hi"
+        raise ValueError(
+            f"Cannot derive instruction_language for a ui_language='hi' row with "
+            f"seed={seed} (run_id={row.get('run_id')!r}, id={row.get('id')!r}) -- "
+            "outside the known E2 (seed 10-19) / E2a (seed 20-29) blocks this "
+            "derivation was verified against. instruction_language must be read "
+            "directly (migration 0005) for this row instead of inferred."
+        )
+    if ui_lang == "hinglish":
+        if seed in E2_EN_INSTRUCTION_SEED_RANGE:
+            return "en"
+        if seed in E2B_HINGLISH_INSTRUCTION_SEED_RANGE:
+            return "hinglish"
+        raise ValueError(
+            f"Cannot derive instruction_language for a ui_language='hinglish' row "
+            f"with seed={seed} (run_id={row.get('run_id')!r}, id={row.get('id')!r}) "
+            "-- outside the known E2 (seed 10-19) / E2b (seed 30-39) blocks this "
+            "derivation was verified against. instruction_language must be read "
+            "directly (migration 0005) for this row instead of inferred."
+        )
+    raise ValueError(
+        f"Unrecognized ui_language={ui_lang!r} (run_id={row.get('run_id')!r}, "
+        f"id={row.get('id')!r}) -- cannot derive instruction_language."
+    )
+
 
 # ---------------------------------------------------------------------------
 # Data loading (read-only)
@@ -92,6 +165,20 @@ def load_episodes(engine: Engine, run_id: str | None) -> pd.DataFrame:
         df["arm"] = pd.Series(dtype="object")
         df["terminal_reason"] = pd.Series(dtype="object")
         return df
+    # Pre-migration-0005 data has neither column; ui_language is a direct
+    # rename of the old single `language` column, instruction_language has
+    # to be derived (see _derive_instruction_language). Only fill in what's
+    # actually missing, so a post-migration run (which has both columns
+    # for real) is read as-is, untouched.
+    if "ui_language" not in df.columns:
+        if "language" not in df.columns:
+            raise KeyError(
+                "episodes table has neither 'ui_language' nor 'language' -- "
+                "can't determine UI language."
+            )
+        df["ui_language"] = df["language"]
+    if "instruction_language" not in df.columns:
+        df["instruction_language"] = df.apply(_derive_instruction_language, axis=1)
     df["arm"] = df.apply(_row_arm, axis=1)
     df["terminal_reason"] = df["trace"].apply(_terminal_reason)
     return df
