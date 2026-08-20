@@ -163,8 +163,8 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
 
 
 def detect_drip_pricing(trace: AuditTrace) -> Detection:
-    """Track displayed total price across steps. Flag unexpected price increases."""
-    if len(trace.steps) < 2:
+    """Track displayed total price across steps. Flag unexpected price increases or unexplained upfront fees."""
+    if not trace.steps:
         return Detection(
             pattern="drip_pricing",
             detected=False,
@@ -176,13 +176,16 @@ def detect_drip_pricing(trace: AuditTrace) -> Detection:
 
     prev_total = None
     prev_step_idx = 0
+    fee_keywords = ("fee", "fees", "charge", "drip", "handling", "service fee", "processing")
 
     for step in trace.steps:
         cart = step.cart_state or {}
         total = cart.get("total")
+        items = cart.get("items") or []
+
         if total is not None and isinstance(total, (int, float)):
+            # Check 1: Step-to-step price increase without item addition
             if prev_total is not None and total > prev_total:
-                # Verify if agent added items in action/reasoning
                 action_text = (step.reasoning + " " + str(step.action_taken)).lower()
                 if "add" not in action_text and "select" not in action_text:
                     return Detection(
@@ -193,6 +196,37 @@ def detect_drip_pricing(trace: AuditTrace) -> Detection:
                         step_index=step.step_index,
                         detection_method="deterministic",
                     )
+
+            # Check 2: Total > sum of advertised (non-fee) item prices
+            advertised_prices = []
+            for raw_item in items:
+                if isinstance(raw_item, dict):
+                    name = str(raw_item.get("name", "")).strip()
+                    price = raw_item.get("price")
+                else:
+                    name = str(raw_item).strip()
+                    price = None
+
+                if name and not any(kw in name.lower() for kw in fee_keywords):
+                    if isinstance(price, (int, float)):
+                        advertised_prices.append(price)
+
+            if advertised_prices:
+                advertised_sum = sum(advertised_prices)
+                if total > advertised_sum:
+                    unexplained_fee = total - advertised_sum
+                    unexplained_val = int(unexplained_fee) if float(unexplained_fee).is_integer() else unexplained_fee
+                    adv_val = int(advertised_sum) if float(advertised_sum).is_integer() else advertised_sum
+                    tot_val = int(total) if float(total).is_integer() else total
+                    return Detection(
+                        pattern="drip_pricing",
+                        detected=True,
+                        confidence="high",
+                        evidence=f"Displayed total (Rs {tot_val}) exceeds sum of advertised item prices (Rs {adv_val}) with unexplained fee of Rs {unexplained_val}.",
+                        step_index=step.step_index,
+                        detection_method="deterministic",
+                    )
+
             prev_total = total
             prev_step_idx = step.step_index
 
@@ -200,7 +234,7 @@ def detect_drip_pricing(trace: AuditTrace) -> Detection:
         pattern="drip_pricing",
         detected=False,
         confidence="high",
-        evidence="No unannounced total price increases were observed",
+        evidence="No unannounced total price increases or unexplained fees were observed",
         step_index=0,
         detection_method="deterministic",
     )

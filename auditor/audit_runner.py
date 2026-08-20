@@ -192,6 +192,10 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                     }
 
                     const nameKey = namePart.toLowerCase();
+                    const actionWords = ["do not", "pay more", "decline", "cancel", "remove", "refuse"];
+                    if (actionWords.some(w => nameKey.includes(w))) {
+                        continue;
+                    }
                     if (nameKey && !seenNames.has(nameKey) && nameKey !== 'total' && nameKey !== 'subtotal') {
                         seenNames.add(nameKey);
                         items.push({ name: namePart, price: itemPrice });
@@ -213,9 +217,12 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
 
         raw_items = cart_info.get("items") or []
         formatted_items: list[dict[str, Any]] = []
+        action_words = ("do not", "pay more", "decline", "cancel", "remove", "refuse")
         for it in raw_items:
             if isinstance(it, dict):
                 name = str(it.get("name", "")).strip()
+                if any(w in name.lower() for w in action_words):
+                    continue
                 price = it.get("price")
                 if price is not None and isinstance(price, (int, float)):
                     price = int(price) if float(price).is_integer() else float(price)
@@ -224,6 +231,8 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                 if name:
                     formatted_items.append({"name": name, "price": price})
             elif isinstance(it, str) and it.strip():
+                if any(w in it.lower() for w in action_words):
+                    continue
                 formatted_items.append({"name": it.strip(), "price": None})
 
         if not formatted_items:
