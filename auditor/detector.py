@@ -448,21 +448,101 @@ def detect_subscription_trap(trace: AuditTrace) -> Detection:
 
 
 def detect_forced_action(trace: AuditTrace) -> Detection:
-    """Scan pre-checkout steps for mandatory non-purchase form fields (account creation, survey, app prompt)."""
-    forced_keywords = ("create account", "sign up to continue", "download app", "share location", "take survey")
+    """Scan steps for mandatory non-purchase form fields or early mandatory data collection."""
+    if not trace.steps:
+        return Detection(
+            pattern="forced_action",
+            detected=False,
+            confidence="medium",
+            evidence="No steps available to scan for forced action",
+            step_index=0,
+            detection_method="deterministic",
+        )
 
-    for step in trace.steps[:-1]:
+    target_fields = ("phone", "mobile", "email", "name", "address")
+    forced_keywords = ("create account", "sign up to continue", "download app", "share location", "take survey")
+    payment_indicators = ("card_number", "cvv", "upi", "vpa", "expiry", "cardholder", "payment", "place order", "pay now")
+
+    input_regex = re.compile(r'<input[^>]*>', re.IGNORECASE)
+
+    for step in trace.steps:
         dom_lower = step.dom_snapshot.lower()
-        for kw in forced_keywords:
-            if kw in dom_lower:
-                return Detection(
-                    pattern="forced_action",
-                    detected=True,
-                    confidence="medium",
-                    evidence=f"Mandatory non-purchase requirement '{kw}' found at step {step.step_index}.",
-                    step_index=step.step_index,
-                    detection_method="deterministic",
-                )
+
+        # Check if step has payment DOM content
+        has_payment_dom = any(pay_kw in dom_lower for pay_kw in payment_indicators)
+
+        # 1. Check for required non-payment form fields in early steps (steps 0-2) or before payment DOM
+        if step.step_index <= 2 or not has_payment_dom:
+            inputs = input_regex.findall(step.dom_snapshot)
+            for inp in inputs:
+                inp_lower = inp.lower()
+                is_valid_type = any(f'type="{t}"' in inp_lower or f"type='{t}'" in inp_lower for t in ("tel", "email", "text")) or "type=" not in inp_lower
+
+                if is_valid_type:
+                    matched_field = None
+                    for field in target_fields:
+                        if field in inp_lower:
+                            matched_field = field
+                            break
+
+                    pos = step.dom_snapshot.find(inp)
+                    surrounding = step.dom_snapshot[max(0, pos - 150) : min(len(step.dom_snapshot), pos + 200)].lower()
+                    if not matched_field:
+                        for field in target_fields:
+                            if field in surrounding:
+                                matched_field = field
+                                break
+
+                    if matched_field:
+                        is_required = (
+                            "required" in inp_lower
+                            or "aria-required=\"true\"" in inp_lower
+                            or "*" in inp_lower
+                            or "*" in surrounding
+                            or "required" in surrounding
+                            or "must provide" in surrounding
+                        )
+                        if is_required:
+                            return Detection(
+                                pattern="forced_action",
+                                detected=True,
+                                confidence="high",
+                                evidence=f"Mandatory {matched_field} field required before purchase at step {step.step_index}",
+                                step_index=step.step_index,
+                                detection_method="deterministic",
+                            )
+
+        # 2. Check if agent trace contains "fill" action on non-payment fields in early steps (steps 0-2)
+        if step.step_index <= 2:
+            action = step.action_taken or {}
+            action_type = str(action.get("action", "")).lower()
+            reasoning = step.reasoning.lower()
+            action_str = str(action).lower()
+
+            if action_type in ("fill", "type") or "fill" in reasoning or "type" in reasoning:
+                for field in target_fields:
+                    if (field in action_str or field in reasoning) and not any(p in action_str or p in reasoning for p in ("card", "cvv", "expiry", "pay")):
+                        return Detection(
+                            pattern="forced_action",
+                            detected=True,
+                            confidence="high",
+                            evidence=f"Mandatory {field} field required before purchase at step {step.step_index}",
+                            step_index=step.step_index,
+                            detection_method="deterministic",
+                        )
+
+        # 3. Keyword check in pre-checkout steps
+        if step.step_index < len(trace.steps) - 1:
+            for kw in forced_keywords:
+                if kw in dom_lower:
+                    return Detection(
+                        pattern="forced_action",
+                        detected=True,
+                        confidence="medium",
+                        evidence=f"Mandatory non-purchase requirement '{kw}' found at step {step.step_index}.",
+                        step_index=step.step_index,
+                        detection_method="deterministic",
+                    )
 
     return Detection(
         pattern="forced_action",
