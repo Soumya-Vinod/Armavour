@@ -414,19 +414,32 @@ def detect_nagging(trace: AuditTrace) -> Detection:
 
 def detect_subscription_trap(trace: AuditTrace) -> Detection:
     """Scan checkout steps for pre-selected recurring billing options."""
-    recurring_keywords = ("monthly", "annually", "recurring", "auto-renew", "subscription", "per month", "per year")
+    if not trace.steps:
+        return Detection(
+            pattern="subscription_trap",
+            detected=False,
+            confidence="high",
+            evidence="No steps available to scan for subscription trap",
+            step_index=0,
+            detection_method="deterministic",
+        )
+
+    recurring_keywords = ("monthly", "annual", "annually", "recurring", "auto-renew", "subscription", "per month", "per year")
     checked_input_regex = re.compile(
-        r'<input[^>]+(?:checked|type=["\']radio["\']|type=["\']checkbox["\'])[^>]*>',
+        r'<input[^>]+(?:type=["\'](?:radio|checkbox)["\']|checked)[^>]*>',
         re.IGNORECASE,
     )
 
     for step in trace.steps:
-        inputs = checked_input_regex.findall(step.dom_snapshot)
+        dom = step.dom_snapshot
+        inputs = checked_input_regex.findall(dom)
         for inp in inputs:
-            if "checked" in inp.lower():
-                pos = step.dom_snapshot.find(inp)
+            inp_lower = inp.lower()
+            is_checked = "checked" in inp_lower or "aria-checked=\"true\"" in inp_lower
+            if is_checked:
+                pos = dom.find(inp)
                 if pos != -1:
-                    snippet = step.dom_snapshot[max(0, pos - 250) : min(len(step.dom_snapshot), pos + 350)].lower()
+                    snippet = dom[max(0, pos - 250) : min(len(dom), pos + 350)].lower()
                     if any(kw in snippet for kw in recurring_keywords):
                         return Detection(
                             pattern="subscription_trap",

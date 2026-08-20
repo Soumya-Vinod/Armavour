@@ -348,6 +348,15 @@ def run_audit(
             reasoning = str(action.get("reasoning", ""))
             action_type = str(action.get("action", "")).lower()
 
+            # Guard: check if agent "fill" action value contains cancellation-related text
+            cancellation_kw = ("cancelling", "cancel", "not satisfied", "reason for leaving")
+            action_value = str(action.get("value", "")).lower() + " " + str(action.get("text", "")).lower()
+            if action_type in ("fill", "type") and any(kw in action_value for kw in cancellation_kw):
+                logger.warning("Guard triggered: Agent attempted to fill cancellation form at step %d. Replacing action with 'done'.", step_idx)
+                action = {"action": "done", "reasoning": "Skipping cancellation form fill"}
+                action_type = "done"
+                reasoning = "Skipping cancellation form fill"
+
             step_record = {
                 "step": step_idx,
                 "reasoning": reasoning,
