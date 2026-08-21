@@ -344,7 +344,13 @@ def run_audit(
             handle_map = filtered_handle_map
 
             # Obtain next action from adapter
-            action, _ = adapter._next_action(task, config, elements, trace_history)
+            try:
+                action, _ = adapter._next_action(task, config, elements, trace_history)
+            except Exception as exc:
+                logger.warning("Step %d adapter action request failed: %s", step_idx, exc)
+                stopped_reason = "error"
+                break
+
             reasoning = str(action.get("reasoning", ""))
             action_type = str(action.get("action", "")).lower()
 
