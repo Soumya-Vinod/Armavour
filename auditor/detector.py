@@ -357,9 +357,9 @@ def detect_nagging(trace: AuditTrace) -> Detection:
             detection_method="deterministic",
         )
 
-    # Regex matching elements containing "modal", "overlay", "popup", "interstitial", or "dialog" in class, id, or role
+    # Regex matching elements containing "modal", "overlay", "popup", "interstitial", "dialog", "nag", or "prompt" in class, id, or role
     modal_element_regex = re.compile(
-        r'<([a-zA-Z0-9]+)[^>]*(?:class|id|role)\s*=\s*["\'][^"\']*(?:modal|overlay|popup|interstitial|dialog)[^"\']*["\'][^>]*>(.*?)</\1>',
+        r'<([a-zA-Z0-9]+)[^>]*(?:class|id|role)\s*=\s*["\'][^"\']*(?:modal|overlay|popup|interstitial|dialog|nag|prompt)[^"\']*["\'][^>]*>(.*?)</\1>',
         re.IGNORECASE | re.DOTALL,
     )
 
@@ -369,22 +369,13 @@ def detect_nagging(trace: AuditTrace) -> Detection:
         dom = step.dom_snapshot
         extracted_texts: list[str] = []
 
-        # Match explicit modal/overlay/popup/interstitial/dialog elements
+        # Match explicit modal/overlay/popup/interstitial/dialog/nag/prompt elements
         matches = modal_element_regex.findall(dom)
         for _, inner_html in matches:
             text = re.sub(r'<[^>]+>', ' ', inner_html)
             clean_text = ' '.join(text.split()).strip()
             if len(clean_text) >= 10:
                 extracted_texts.append(clean_text)
-
-        # Fallback: extract larger text blocks (>50 chars) if no explicit modal container matched
-        if not extracted_texts:
-            block_regex = re.compile(r'<(?:div|p|section)[^>]*>(.*?)</(?:div|p|section)>', re.IGNORECASE | re.DOTALL)
-            for block_match in block_regex.findall(dom):
-                text = re.sub(r'<[^>]+>', ' ', block_match)
-                clean_text = ' '.join(text.split()).strip()
-                if len(clean_text) > 50:
-                    extracted_texts.append(clean_text)
 
         for text in extracted_texts:
             if text not in modal_text_steps:
