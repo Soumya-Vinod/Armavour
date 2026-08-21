@@ -242,7 +242,7 @@ def detect_drip_pricing(trace: AuditTrace) -> Detection:
 
 def detect_bait_and_switch(trace: AuditTrace) -> Detection:
     """Compare product/price shown on listing (steps 0-2) vs checkout (last 3 steps)."""
-    if len(trace.steps) < 3:
+    if len(trace.steps) < 2:
         return Detection(
             pattern="bait_and_switch",
             detected=False,
