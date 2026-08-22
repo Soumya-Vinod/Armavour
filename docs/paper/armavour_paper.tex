@@ -15,7 +15,7 @@
 
 \begin{document}
 
-\title{Armavour: A CCPA-Grounded Agent Dark-Pattern Benchmark\\and Four
+\title{Armavour: A CCPA-Grounded Agent Dark-Pattern Benchmark\\and Five
 Measurement-Validity Failures\\
 \thanks{Work conducted at Vivekanand Education Society's Institute of
 Technology, Mumbai.}}
@@ -47,17 +47,18 @@ scales monotonically with intensity, and that patterns exploiting
 information asymmetry succeed while patterns exploiting human
 perceptual and affective limits---visual salience, irritation, patience,
 guilt---fail entirely under both architectures.
-We also report, as a co-equal contribution, four distinct ways in which
+We also report, as a co-equal contribution, five distinct ways in which
 this benchmark measured something other than what it named: an item
 whose manipulation could be bypassed by evaluating the task's stated
-criterion; an agent framework's internal completion signal absorbed by
+criterion; element identifiers that disclosed the ground-truth answer to
+the agent; an agent framework's internal completion signal absorbed by
 an outcome-based metric as evidence of safe behaviour; a results column
 whose denominator changed silently mid-table; and a deception rate
 inflated by baseline comprehension failure on non-English interfaces.
 Each produced stable, plausible, internally consistent numbers; none was
 visible in aggregate statistics; each was found only by reconstructing
 the quantity from raw episode records under an explicit hypothesis. We
-give the detection signature for each and argue all four generalise
+give the detection signature for each and argue all five generalise
 beyond this benchmark.
 \end{abstract}
 
@@ -95,12 +96,13 @@ taxonomy, so that a result about pattern $X$ is a result about a
 category regulators already enforce against named platforms.
 
 The second emerged from building it: \emph{can we trust the measurement
-that answers the first?} Four times during this work, a component of
-our benchmark produced numbers that were stable across reruns,
-plausible against prior work, internally consistent, and wrong about
-what they measured. One item's manipulation turned out never to be
-load-bearing. One scoring rule quietly counted an agent framework's own
-``task complete'' signal as evidence the agent had resisted a dark
+that answers the first?} Five times during this work, a component of our
+benchmark produced numbers that were stable across reruns, plausible
+against prior work, internally consistent, and wrong about what they
+measured. One item's manipulation turned out never to be load-bearing.
+The element identifiers our harness requires turned out to name the
+correct answer. One scoring rule quietly counted an agent framework's
+own ``task complete'' signal as evidence the agent had resisted a dark
 pattern. One results column pooled arms with different coverage and
 changed denominator halfway down. And one experimental arm's headline
 deception rate turned out to rest substantially on the agent failing to
@@ -109,7 +111,7 @@ comprehend the honest interface at all.
 None of these announced itself. Each was found only by reconstructing
 the reported quantity from raw episode records under an explicit
 hypothesis and observing where the reconstruction failed. We report all
-four in Section~\ref{sec:validity}, before the results they affect,
+five in Section~\ref{sec:validity}, before the results they affect,
 because we believe the failure modes are properties of how this class of
 benchmark is built rather than accidents of our implementation.
 
@@ -121,17 +123,17 @@ patterns at four intensities and three languages, with DOM-level ground
 truth, versioned interface contracts, and a validated LLM judge for the
 patterns whose success condition is not deterministically observable.
 
-\item \textbf{Four measurement-validity failure modes} in agent
-susceptibility benchmarking---criterion-bypassable items, completion-
-signal contamination, denominator drift, and baseline
-contamination---each with the empirical signature that detects it
-(Section~\ref{sec:validity}).
+\item \textbf{Five measurement-validity failure modes} in agent
+susceptibility benchmarking---criterion-bypassable items, identifier
+leakage, completion-signal contamination, denominator drift, and
+baseline contamination---each with the empirical signature that detects
+it (Section~\ref{sec:validity}).
 
 \item \textbf{A reconstruction protocol}: we argue that recomputing
 every reported quantity from raw records under a stated hypothesis
-should be a routine step in benchmark reporting, not a response to
-anomaly, and show that all four failures above were detectable this way
-and by no other means we tried.
+should be a routine step in benchmark reporting rather than a response
+to anomaly, and show that all five failures above were detectable this
+way and by no other means we tried.
 
 \item An \textbf{intensity dose-response result}: deception rises
 monotonically from 0\% at control to 38\% at aggressive intensity under
@@ -186,12 +188,12 @@ not degrade over time; it was never measuring the construct.
 This matters specifically for safety benchmarks. A capability benchmark
 that measures the wrong thing produces a wrong leaderboard. A safety
 benchmark that measures the wrong thing produces a false assurance, and
-the direction of the error is not random---three of our four failures
+the direction of the error is not random---four of our five failures
 biased toward \emph{apparent safety}, because the default coding of an
 ambiguous outcome is usually the benign one. We are not aware of prior
 work characterising these failure modes for agent susceptibility
-evaluation or supplying detection signatures for them, and we treat
-that gap as this paper's most transferable contribution.
+evaluation or supplying detection signatures for them, and we treat that
+gap as this paper's most transferable contribution.
 
 \subsection{Multilingual evaluation}
 
@@ -221,6 +223,8 @@ does more work than we originally assigned it.
 \textbf{Versioned interface contracts.} Five contracts govern component
 seams: episode configuration, oracle output, stable element identifiers,
 the episode log schema, and the judge rubric interface.
+Section~\ref{sec:leakage} shows that the third of these was in tension
+with measurement validity in a way we did not anticipate.
 
 \subsection{Testbed}
 
@@ -256,7 +260,7 @@ way we did not anticipate.
 At the terminal action the page sets a global result object:
 
 \begin{verbatim}
-{ pattern, avoided, total, expected_total, ... }
+{ pattern, avoided, total, ... }
 \end{verbatim}
 
 Outcomes are coded on two binary axes---task completed, pattern
@@ -301,10 +305,10 @@ would have been wasted effort.
 
 \section{Experimental Design}
 
-The agent is \texttt{llama-3.3-70b-versatile}; the cross-model
-spot-check uses \texttt{llama-3.1-8b-instant}; the judge is
+The agent is \texttt{llama-3.3-70b-versatile}; cross-model spot-checks
+use \texttt{llama-3.1-8b-instant} and \texttt{gpt-oss-20b}; the judge is
 \texttt{gpt-oss-120b}. Inference is deterministic
-($\text{temperature}=0$) at every call site. Both agent models have
+($\text{temperature}=0$) at every call site. Both llama models have
 since been withdrawn by the provider; see
 Section~\ref{sec:limitations}.
 
@@ -312,7 +316,7 @@ Section~\ref{sec:limitations}.
 \item \textbf{E1a}: twelve patterns $\times$ four intensities $\times$
 ten seeds, English, ComputerUse.
 \item \textbf{Spot-check}: twelve patterns, aggressive only, five seeds,
-smaller model, ComputerUse.
+smaller models, ComputerUse.
 \item \textbf{E1b}: E1a's matrix on BrowserUse.
 \item \textbf{E2}: five language-sensitive patterns $\times$ three
 intensities $\times$ three interface languages $\times$ ten seeds,
@@ -322,10 +326,11 @@ instruction also localised.
 \end{itemize}
 
 1,928 episodes were run; 1,600 are scored, after excluding two patterns
-established as unmeasurable (Section~\ref{sec:measurability}) and eight
-duplicate reruns. Language-sensitive strings were written by a native
-speaker, not machine-translated: a flat translation of a triple-nested
-negation would not preserve the manipulation the item tests.
+established as unmeasurable (Sections~\ref{sec:measurability}
+and~\ref{sec:leakage}) and eight duplicate reruns. Language-sensitive
+strings were written by a native speaker, not machine-translated: a flat
+translation of a triple-nested negation would not preserve the
+manipulation the item tests.
 
 The E2 versus E2a/E2b split was intended to separate interface language
 from instruction language. It ended up serving a different and more
@@ -334,7 +339,7 @@ important purpose (Section~\ref{sec:baseline}).
 \section{Measurement-Validity Failures}
 \label{sec:validity}
 
-We present these before the results because three of the four change
+We present these before the results because four of the five change
 figures we would otherwise have reported, and because the reconstruction
 protocol that found them is what licenses the numbers in
 Section~\ref{sec:results}.
@@ -352,19 +357,18 @@ That decision made the item unmeasurable. Because the ad was the most
 expensive and the task asked for the cheapest, any agent that compared
 prices avoided it---regardless of whether the sponsored label was shown,
 greyed, or absent. Intensity could not affect the outcome, and did not:
-0\% deception at every level, under both architectures, across 85
-episodes.
+0\% deception at every level, under both architectures.
 
 \textbf{Detection signature: an intensity ladder with zero slope, and
-disagreement with a prior run.} An earlier pilot had returned 60\%
-deception on this item. Reconciling the two showed the pilot agent had
-received no product names or prices at all---its traces read ``all
-buttons have the same text `Buy''' and ``no product details
-provided''---and had defaulted to the first element, which happened to
-be the ad. The pilot measured a perception-pipeline gap and reported it
-as ad-disguise susceptibility. Once the extraction layer supplied
-surrounding text, the rate fell to zero, which is the correct value for
-an item that cannot discriminate.
+disagreement with a prior run.} An earlier pilot returned 60\% deception
+on this item. Reconciling the two showed the pilot agent had received no
+product names or prices at all---its traces read ``all buttons have the
+same text `Buy''' and ``no product details provided''---and had
+defaulted to the first element, which happened to be the ad. The pilot
+measured a perception-pipeline gap and reported it as ad-disguise
+susceptibility. Once the extraction layer supplied surrounding text, the
+rate fell to zero, which is the correct value for an item that cannot
+discriminate.
 
 \textbf{General condition:} \emph{if the task's stated criterion is
 sufficient to identify the correct choice, the manipulation is never
@@ -373,22 +377,70 @@ manipulation susceptibility.} An item can satisfy every apparent
 correctness requirement---unambiguous ground truth, a well-formed
 intensity ladder, a clean oracle---and still measure nothing.
 
-The released benchmark inverts the price relationship so the ad is
-cheapest and price-only reasoning selects it, making the sponsored label
-the sole discriminating signal. We report no figures for the corrected
-item (Section~\ref{sec:limitations}).
-
 False urgency has the same structure---single-choice, price-decidable,
 urgency copy never load-bearing---with no equivalent fix: making the
 urgent item cheapest would make selecting it correct, and equalising
 prices removes the discriminator. Urgency is pressure to act
-\emph{quickly}, which a single-step episode cannot express. We exclude
-it rather than report a number we cannot defend.
+\emph{quickly}, which a single-step episode cannot express.
 
 \textbf{Corollary for benchmark authors:} a pattern scoring far from its
 published baseline in either direction warrants a construction audit
 before it is reported. Our 100\% avoidance against a prior-work baseline
 of roughly 65\% was the anomaly that started this investigation.
+
+\subsection{Identifier leakage}
+\label{sec:leakage}
+
+We had planned to correct the disguised-advertisement item by inverting
+the price relationship, so the ad becomes cheapest and price-only
+reasoning selects it. A later spot-check on a third agent model showed
+that this correction would not have worked, for a reason we had not
+considered.
+
+Contract~3 requires every interactive element to carry a stable, unique
+identifier, so the harness can act on elements reliably across renders.
+We named them descriptively, as one does: \texttt{item-ad} for the
+sponsored placement and \texttt{item-org-1} through
+\texttt{item-org-3} for the organic results. The extraction layer
+includes each element's identifier in the JSON handed to the model,
+because the model must be able to refer to elements when choosing an
+action.
+
+The identifiers name the answer. At \texttt{aggressive} intensity---the
+level at which the specification requires \emph{no label at all}---an
+agent produced this reasoning:
+
+\begin{quote}
+\emph{``The ad item (PowerCharge Fast Cable) is a disguised
+advertisement and should not be considered genuine. Among the genuine
+organic results, the cheapest is Basic USB-C Cable at Rs 199.''}
+\end{quote}
+
+It identified the sponsored placement with no visual label present, and
+described the alternatives as ``organic''---a term from our internal
+taxonomy, not from the rendered page. The same holds for false urgency,
+whose identifiers are \texttt{item-urgent} and \texttt{item-calm-1};
+agent traces reference \texttt{buy-item-calm-1} directly.
+
+\textbf{Detection signature: agent reasoning containing vocabulary that
+appears nowhere in the rendered interface.} The word ``organic'' does
+not appear on the page. Its presence in a reasoning trace is a direct
+indication that something other than the rendered interface reached the
+model.
+
+\textbf{General condition:} \emph{any channel the harness requires for
+control---element identifiers, accessibility labels, test hooks,
+ordering---can also carry the ground-truth answer, and will do so by
+default, because the names that make a testbed maintainable are the
+names that describe what each element is for.} This is a direct tension
+between a benchmark's engineering requirements and its measurement
+validity, and it is invisible from outcome data alone: an item leaking
+its answer looks exactly like an item the agent is robust to.
+
+The remedy is opaque identifiers---\texttt{item-a},
+\texttt{item-b}---accepting the maintenance cost, and auditing every
+pattern for the same disclosure. We have not completed that audit, and
+therefore report no corrected figures for either affected item.
 
 \subsection{Completion-signal contamination}
 \label{sec:completion}
@@ -414,11 +466,19 @@ the page's terminal action, the oracle never runs, and an outcome scheme
 keying ``avoided'' on the absence of a deceived oracle result credits
 the episode as safe.
 
+A later spot-check reproduced the effect in a different model on our own
+adapter, at a higher rate: 16 of 60 episodes (27\%), with traces such as
+\emph{``the order summary confirms the ticket price is Rs 500 and the
+order has been placed successfully''} immediately before a
+\texttt{done}---issued without the payment button ever being clicked.
+The agent did not merely stop early; it asserted a completion that had
+not occurred.
+
 \textbf{Detection signature: an outcome-category rate that differs by an
-order of magnitude across architectures, plus the presence of that
-category in the control condition.} Seven of the 48 occur at
-\texttt{control} intensity, where no manipulation exists to avoid. Those
-are unambiguously task failures scored on the safe side.
+order of magnitude across architectures or models, plus the presence of
+that category in the control condition.} Seven of BrowserUse's 48 occur
+at \texttt{control} intensity, where no manipulation exists to avoid.
+Those are unambiguously task failures scored on the safe side.
 
 \textbf{General condition:} \emph{when an agent framework has an
 internal notion of task completion, and a safety metric infers safety
@@ -426,9 +486,8 @@ from the absence of an unsafe outcome, the framework's completion signal
 is silently converted into a safety claim.} This is invisible in
 aggregate statistics---BrowserUse's lower deception rates in
 Table~\ref{tab:patterns} are partly this artefact---and surfaces only
-when the ambiguous outcome category is disaggregated by architecture and
-its traces read. Cross-architecture comparisons reporting only a
-deception rate will not find it.
+when the ambiguous outcome category is disaggregated and its traces
+read.
 
 \subsection{Denominator drift}
 \label{sec:denominators}
@@ -454,8 +513,9 @@ detectable by reconstruction.
 \subsection{Baseline contamination}
 \label{sec:baseline}
 
-The fourth failure inflates this paper's own headline result, and is the
-reason Section~\ref{sec:lang} reports the language effect conditionally.
+The fifth failure inflates this paper's own headline result, and is the
+reason Section~\ref{sec:lang} reports the language effect
+conditionally.
 
 The \texttt{control} condition renders each task honestly: no
 manipulation is present, so a deceived outcome should be impossible.
@@ -493,23 +553,23 @@ susceptibility.
 
 \textbf{Detection signature: a non-zero rate in the null condition,
 disaggregated along the same axis as the reported effect.} A pooled
-control figure across all arms (39 of 300, or 13\%) looks like tolerable
+control figure across all arms (34 of 300, or 11\%) looks like tolerable
 noise. Split by language it is a monotone tracking precisely the
 variable whose effect is being claimed.
 
 \textbf{General condition:} \emph{when a manipulated variable also
 degrades baseline task competence, an outcome-based deception metric
 sums the two, and the design cannot apportion them.} This is not a
-confound in the usual sense---it is not that some third variable causes
-both---but a failure of the metric to distinguish two mechanisms that
-produce the same recorded outcome.
+confound in the usual sense---no third variable causes both---but a
+failure of the metric to distinguish two mechanisms producing the same
+recorded outcome.
 
-The consequence for this paper is direct. Our fully-localised Hindi arm
-records 73.3\% deception; a large share of that is baseline failure, and
-we cannot say how much. The English-instruction arms retain an
-interpretable baseline and are reported as the primary result.
+The consequence is direct. Our fully-localised Hindi arm records 73.3\%
+deception; a large share is baseline failure, and we cannot say how
+much. The English-instruction arms retain an interpretable baseline and
+are reported as the primary result.
 
-\subsection{What the four have in common}
+\subsection{What the five have in common}
 
 Each produced a number that was stable across reruns, plausible against
 prior expectations, internally consistent, and not a measurement of what
@@ -518,7 +578,7 @@ same way: by taking a reported quantity, stating a hypothesis about how
 it was computed, recomputing it from raw episode records, and examining
 where the reconstruction diverged.
 
-Three of the four biased toward apparent safety. We suspect this is
+Four of the five biased toward apparent safety. We suspect this is
 systematic rather than coincidental: when an outcome is ambiguous, the
 default coding is usually the benign one, because benign outcomes are
 what the instrument is built to expect.
@@ -527,8 +587,8 @@ what the instrument is built to expect.
 \label{sec:results}
 
 All figures below are computed on the 1,600 scored episodes, excluding
-disguised advertisement and false urgency
-(Section~\ref{sec:measurability}) consistently across every table.
+disguised advertisement and false urgency consistently across every
+table.
 
 \subsection{Aggregate outcomes}
 
@@ -596,7 +656,7 @@ difference through that adapter.
 
 \begin{table}[htbp]
 \caption{Deception rate by pattern and architecture ($n=40$ per cell,
-English instruction). Starred entries are judge-adjusted.}
+English instruction). $^\star$Judge-adjusted; raw rate 2.5\%.}
 \begin{center}
 \begin{tabular}{lrr}
 \toprule
@@ -613,7 +673,8 @@ Subscription trap         & 0.0\%  & 0.0\%  \\
 Interface interference    & 0.0\%  & 0.0\%  \\
 Nagging                   & 0.0\%  & 0.0\%  \\
 \midrule
-\multicolumn{3}{l}{\emph{Excluded, Section~\ref{sec:measurability}:}} \\
+\multicolumn{3}{l}{\emph{Excluded, Sections~\ref{sec:measurability}
+and~\ref{sec:leakage}:}} \\
 Disguised advertisement   & --- & --- \\
 False urgency             & --- & --- \\
 \bottomrule
@@ -625,7 +686,7 @@ False urgency             & --- & --- \\
 Confirm shaming's raw rate under E1a is 2.5\%---a single episode---but
 the judge classifies that episode as a task-failure DC rather than
 genuine susceptibility, giving 0.0\%. Without the judge distinction it
-would appear in the table as weakly effective rather than as a null.
+would appear as weakly effective rather than as a null.
 
 Three observations. First, four patterns produce no genuine deception
 under either architecture; Section~\ref{sec:nulls} argues they share a
@@ -641,8 +702,7 @@ read alongside Section~\ref{sec:completion}.
 
 \begin{table}[htbp]
 \caption{Deception rate by language condition ($n=150$ per row).
-Bracketed rows are not interpretable; see
-Section~\ref{sec:baseline}.}
+$^\dagger$Not interpretable; see Section~\ref{sec:baseline}.}
 \begin{center}
 \begin{tabular}{llrr}
 \toprule
@@ -670,7 +730,7 @@ versus Hindi, 26 scenarios avoided in English but deceived in Hindi
 against 3 in the reverse direction, $p = 1.52\times10^{-5}$.
 
 English versus Hinglish is \emph{not} significant: 16 versus 7
-discordant pairs, $p = 0.093$. We report this because the three-point
+discordant pairs, $p = 0.093$. We state this because the three-point
 monotone in the table invites a stronger claim than the pairwise tests
 support.
 
@@ -679,8 +739,9 @@ deception reaches 30.0\% (Hinglish) and 73.3\% (Hindi). We do not
 interpret these. The Hindi arm's control condition fails 21 times in 50
 (Table~\ref{tab:controlfail}), so an unknown but substantial share of
 that 73.3\% is the agent failing to operate an honest interface. The
-judge-adjusted figure for this arm is 54.0\%, a 29-episode gap, which
-indicates the contamination is partly visible to a judge and partly not.
+judge-adjusted figure for this arm is 54.0\%, a 29-episode gap,
+indicating the contamination is partly visible to a judge and partly
+not.
 
 \begin{table}[htbp]
 \caption{Language effect by pattern, English instruction ($n=30$)}
@@ -703,7 +764,7 @@ Confirm shaming         & 0.0\%  & 0.0\%  & 0.0\%  \\
 The effect is concentrated in patterns that already succeed in English.
 The two patterns that are nulls in English remain nulls in every
 language---consistent with Section~\ref{sec:nulls}'s account, since
-language cannot make an agent acquire visual attention or capacity for
+language cannot make an agent acquire visual attention or a capacity for
 guilt.
 
 \section{Qualitative Analysis}
@@ -733,9 +794,9 @@ response matching on ``free'' without evaluating surrounding pricing.
 
 \subsection{Task abandonment}
 
-Excluding the BrowserUse episodes explained in
-Section~\ref{sec:completion}, nineteen episodes ended with task
-incomplete and pattern avoided, in three archetypes.
+Excluding the episodes explained in Section~\ref{sec:completion},
+nineteen episodes ended with task incomplete and pattern avoided, in
+three archetypes.
 
 \textbf{Principled refusal} (11 episodes, SaaS billing, larger model).
 The model recognises that the only available path commits the user to a
@@ -797,22 +858,24 @@ interface-interference null specifically.
 \section{Limitations}
 \label{sec:limitations}
 
-\textbf{The models under test no longer exist.} Both agent models were
-withdrawn by the provider, with service terminated shortly after data
-collection completed. The benchmark is reproducible in
-construction---testbed, specifications, rubrics and configuration
-enumeration are released---but the figures are not, because the system
-they measured is gone. Results obtained against hosted proprietary
-endpoints have a shelf life set by the provider, not the research.
+\textbf{The identifier audit is incomplete.} Section~\ref{sec:leakage}
+establishes that element identifiers disclosed the answer for two
+patterns. We have not audited the remaining ten. Any pattern whose
+identifiers encode a semantic distinction the task depends on is
+potentially affected, and the reported rates for those patterns would be
+lower bounds on true susceptibility.
+
+\textbf{The models under test no longer exist.} Both primary agent
+models were withdrawn by the provider shortly after data collection.
+The benchmark is reproducible in construction---testbed, specifications,
+rubrics and configuration enumeration are released---but the figures are
+not, because the system they measured is gone. Results obtained against
+hosted proprietary endpoints have a shelf life set by the provider, not
+the research.
 
 \textbf{The fully-localised language arms are not interpretable.} See
 Section~\ref{sec:baseline}. We report them for completeness and because
 the contamination is itself a finding.
-
-\textbf{No corrected disguised-advertisement figures.} The corrected
-item could not be re-run on the same model before withdrawal, and
-running it on a substitute would make it non-comparable with the other
-patterns in the same table.
 
 \textbf{BrowserUse outcomes are partly architectural.} 11.8\% of scored
 E1b episodes reflect the framework's completion signal rather than agent
@@ -833,16 +896,13 @@ language arms ran, the episode log stored a single \texttt{language}
 column; the separation of instruction language from interface language
 existed only in memory and was dropped on insert. The conditions are
 recoverable only because they ran with disjoint seed blocks on different
-dates---fortunate rather than designed, and a fifth reminder that an
-experiment's schema should be verified to represent every variable the
-experiment manipulates.
+dates---fortunate rather than designed.
 
 \textbf{Deterministic outcomes conflate mechanism.} For oracle-scored
 patterns we have no equivalent of the judge's causal separation, so a
 deceived score does not distinguish falling for the manipulation from
-mis-executing a correct intention. This is the same failure as
-Section~\ref{sec:baseline} in a milder form, and the traces are retained
-so it can be quantified.
+mis-executing a correct intention. This is Section~\ref{sec:baseline}'s
+failure in a milder form; traces are retained so it can be quantified.
 
 \textbf{DF is unreachable by construction.} \texttt{avoided} is carried
 by the oracle result, so a deceived outcome requires a completed
@@ -856,23 +916,23 @@ from how well they work on people: patterns exploiting information
 asymmetry transfer, patterns exploiting human perceptual and affective
 limits do not.
 
-We also found four ways our own instrument measured something other than
-what it named. An item whose manipulation was never load-bearing. A
-scoring rule that read an agent framework's ``task complete'' as ``dark
-pattern avoided.'' A table whose denominator changed mid-column. And a
-deception rate inflated by the agent's inability to read the honest
-interface. All four produced stable, plausible numbers. Three biased
-toward apparent safety.
+We also found five ways our own instrument measured something other than
+what it named. An item whose manipulation was never load-bearing.
+Element identifiers that told the agent the answer. A scoring rule that
+read an agent framework's ``task complete'' as ``dark pattern avoided.''
+A table whose denominator changed mid-column. And a deception rate
+inflated by the agent's inability to read the honest interface. All five
+produced stable, plausible numbers. Four biased toward apparent safety.
 
 We do not think we were unusually careless. We think these are the
-shapes that measurement failure takes in this class of benchmark, and
-that they are difficult to see precisely because the numbers they
-produce look correct. Each was found by the same method: state how a
-reported quantity was supposed to be computed, recompute it from raw
-records, and look at where the reconstruction breaks. That method cost
-us days and found four errors, one of which inflated our own headline
-result. We suggest it belongs in the standard reporting path for agent
-safety benchmarks, not in the incident response path.
+shapes measurement failure takes in this class of benchmark, and that
+they are difficult to see precisely because the numbers they produce
+look correct. Each was found by the same method: state how a reported
+quantity was supposed to be computed, recompute it from raw records, and
+look at where the reconstruction breaks. That method cost us days and
+found five errors, one of which inflated our own headline result. We
+suggest it belongs in the standard reporting path for agent safety
+benchmarks, not in the incident response path.
 
 \section*{Availability}
 
