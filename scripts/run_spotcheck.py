@@ -23,7 +23,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import argparse
 import datetime
-import logging
 import os
 import re
 import signal

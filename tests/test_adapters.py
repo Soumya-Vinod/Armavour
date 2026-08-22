@@ -347,3 +347,51 @@ def test_browseruse_adapter_groq_llm_configuration(monkeypatch: pytest.MonkeyPat
     assert agent_inst.llm.kwargs["remove_min_items_from_schema"] is True
     assert agent_inst.llm.kwargs["remove_defaults_from_schema"] is True
     assert agent_inst.kwargs.get("flash_mode") is True
+
+
+def test_elements_for_prompt_replaces_semantic_id_with_positional_label() -> None:
+    raw_elements = [
+        {
+            "index": 0,
+            "id": "buy-item-urgent",
+            "role": "button",
+            "text": "Buy Now",
+            "context_text": "Deal ends in 5 mins",
+            "checked": None,
+            "visible": True,
+        },
+        {
+            "index": 1,
+            "id": "item-ad",
+            "role": "checkbox",
+            "text": "Add Protection",
+            "context_text": "",
+            "checked": False,
+            "visible": True,
+        },
+    ]
+
+    prompt_elements = computeruse._elements_for_prompt(raw_elements)
+
+    assert prompt_elements == [
+        {
+            "index": 0,
+            "label": "element-0",
+            "role": "button",
+            "text": "Buy Now",
+            "context_text": "Deal ends in 5 mins",
+            "checked": None,
+            "visible": True,
+        },
+        {
+            "index": 1,
+            "label": "element-1",
+            "role": "checkbox",
+            "text": "Add Protection",
+            "checked": False,
+            "visible": True,
+        },
+    ]
+    assert all("id" not in el for el in prompt_elements)
+    assert not any("buy-item-urgent" in str(el) or "item-ad" in str(el) for el in prompt_elements)
+
