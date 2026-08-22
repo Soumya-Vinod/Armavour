@@ -7,7 +7,14 @@ from unittest.mock import patch
 import pytest
 from litellm.exceptions import RateLimitError
 
-from harness.providers.key_pool import APIKeyPool, completion_with_rotation, is_rate_limit_error
+from harness.providers.key_pool import (
+    APIKeyPool,
+    TPDExhaustedError,
+    completion_with_rotation,
+    is_rate_limit_error,
+    is_tpd_error,
+    tpd_retry_after_seconds,
+)
 
 
 def test_single_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -155,6 +162,108 @@ def test_exhaustion_and_no_infinite_loop(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     # Exactly 2 attempts (total_keys=2), no infinite loop!
     assert attempts == 2
+
+
+def test_is_tpd_error_distinguishes_tpd_from_tpm() -> None:
+    tpd_exc = RateLimitError(
+        message=(
+            "Rate limit reached for model `llama-3.3-70b-versatile` in organization "
+            "`org_123` on tokens per day (TPD): Limit 500000, Used 500000, Requested 1200. "
+            "Please try again in 16m25s."
+        ),
+        model="groq/llama-3.3-70b-versatile",
+        llm_provider="groq",
+    )
+    tpm_exc = RateLimitError(
+        message=(
+            "Rate limit reached for model `llama-3.3-70b-versatile` in organization "
+            "`org_123` on tokens per minute (TPM): Limit 6000, Used 6000, Requested 500. "
+            "Please try again in 4.2s."
+        ),
+        model="groq/llama-3.3-70b-versatile",
+        llm_provider="groq",
+    )
+    plain_429 = RuntimeError("HTTP 429: rate limit exceeded")
+
+    assert is_tpd_error(tpd_exc) is True
+    assert is_tpd_error(tpm_exc) is False
+    assert is_tpd_error(plain_429) is False
+
+    # Both TPD and TPM read as rate limits generically -- is_rate_limit_error must
+    # not be narrowed by the TPD-specific check.
+    assert is_rate_limit_error(tpd_exc) is True
+    assert is_rate_limit_error(tpm_exc) is True
+
+
+def test_tpd_retry_after_seconds_parses_minutes_and_seconds() -> None:
+    minutes_and_seconds = RuntimeError("... Please try again in 16m25s.")
+    seconds_only = RuntimeError("... Please try again in 4.2s.")
+    hours_minutes_seconds = RuntimeError("... Please try again in 1h2m3s.")
+    no_hint = RuntimeError("... on tokens per day (TPD): Limit exceeded.")
+
+    assert tpd_retry_after_seconds(minutes_and_seconds) == pytest.approx(16 * 60 + 25)
+    assert tpd_retry_after_seconds(seconds_only) == pytest.approx(4.2)
+    assert tpd_retry_after_seconds(hours_minutes_seconds) == pytest.approx(3723)
+    assert tpd_retry_after_seconds(no_hint) is None
+
+
+def test_completion_with_rotation_raises_tpd_exhausted_after_trying_every_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "key_1,key_2")
+    ckpt = tmp_path / "provider_state.json"
+    pool = APIKeyPool(provider="groq", env_var="GROQ_API_KEY", checkpoint_path=ckpt)
+
+    calls: list[str | None] = []
+
+    def mock_tpd_completion(*args: object, **kwargs: object) -> None:
+        calls.append(str(kwargs.get("api_key")))
+        raise RateLimitError(
+            message=(
+                "Rate limit reached ... on tokens per day (TPD): Limit 500000, "
+                "Used 500000, Requested 1200. Please try again in 16m25s."
+            ),
+            model="groq/llama-3.3-70b-versatile",
+            llm_provider="groq",
+        )
+
+    with (
+        patch("harness.providers.key_pool.litellm.completion", side_effect=mock_tpd_completion),
+        pytest.raises(TPDExhaustedError) as exc_info,
+    ):
+        completion_with_rotation(model="groq/llama-3.3-70b-versatile", messages=[], pool=pool)
+
+    # Rotated through every key before giving up -- TPD still rotates like any
+    # other rate limit; only exhaustion triggers the clean-halt error.
+    assert calls == ["key_1", "key_2"]
+    assert exc_info.value.retry_after_seconds == pytest.approx(16 * 60 + 25)
+    # TPDExhaustedError is a clean-halt signal, not an episode-level failure.
+    assert isinstance(exc_info.value, KeyboardInterrupt)
+
+
+def test_completion_with_rotation_tpm_exhaustion_still_raises_raw_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """TPM exhaustion (short recovery window) must NOT be treated as a clean-halt
+    signal -- only TPD should raise TPDExhaustedError."""
+    monkeypatch.setenv("GROQ_API_KEY", "key_1,key_2")
+    ckpt = tmp_path / "provider_state.json"
+    pool = APIKeyPool(provider="groq", env_var="GROQ_API_KEY", checkpoint_path=ckpt)
+
+    def mock_tpm_completion(*args: object, **kwargs: object) -> None:
+        raise RateLimitError(
+            message="Rate limit reached ... on tokens per minute (TPM). Please try again in 4.2s.",
+            model="groq/llama-3.3-70b-versatile",
+            llm_provider="groq",
+        )
+
+    with (
+        patch("harness.providers.key_pool.litellm.completion", side_effect=mock_tpm_completion),
+        pytest.raises(RateLimitError) as exc_info,
+    ):
+        completion_with_rotation(model="groq/llama-3.3-70b-versatile", messages=[], pool=pool)
+
+    assert not isinstance(exc_info.value, TPDExhaustedError)
 
 
 def test_non_rate_limit_error_does_not_rotate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

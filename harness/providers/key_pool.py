@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import tempfile
 import threading
 from pathlib import Path
@@ -26,6 +27,62 @@ RATE_LIMIT_ERROR_KEYWORDS = (
     "rate_limit_exceeded",
     "rate limit",
 )
+
+# Groq's tokens-per-day error body contains this exact phrase, distinguishing it
+# from the much shorter tokens-per-minute (TPM) limit, which recovers in seconds.
+TPD_ERROR_MARKER = "on tokens per day (tpd)"
+
+_TPD_RETRY_AFTER_RE = re.compile(
+    r"try again in\s+(?:(?P<hours>\d+)h)?\s*(?:(?P<minutes>\d+)m)?\s*(?:(?P<seconds>\d+(?:\.\d+)?)s)?",
+    re.IGNORECASE,
+)
+
+
+class TPDExhaustedError(KeyboardInterrupt):
+    """Raised when a Groq tokens-per-day (TPD) limit is hit and every available
+    key has been exhausted, so there is nothing left to do about it within this run.
+
+    TPD limits reset roughly once every 24h, unlike tokens-per-minute (TPM) limits
+    which recover in seconds — so the usual second-scale backoff retry is pointless,
+    and converting every remaining episode into a crash row would just waste the
+    rest of the batch. This intentionally subclasses KeyboardInterrupt rather than
+    Exception so it passes straight through `except Exception` handling in
+    harness/runner.py (the adapter retry loop and the per-episode crash-row catch)
+    and is instead caught by run_batch()'s / scripts/run_matrix.py's existing
+    interrupted-run summary and resume-instructions path, exactly like a real
+    Ctrl+C would be.
+    """
+
+    def __init__(self, message: str, *, retry_after_seconds: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+def is_tpd_error(exc: Exception) -> bool:
+    """Return True if `exc` represents a Groq tokens-per-day (TPD) exhaustion, as
+    distinct from the much shorter tokens-per-minute (TPM) rate limit."""
+    return TPD_ERROR_MARKER in str(exc).lower()
+
+
+def tpd_retry_after_seconds(exc: Exception) -> float | None:
+    """Parse a Groq "Please try again in Xm Ys" hint out of an error message,
+    returning the wait time in seconds, or None if no such hint is present."""
+    match = _TPD_RETRY_AFTER_RE.search(str(exc))
+    if not match:
+        return None
+    hours = float(match.group("hours") or 0)
+    minutes = float(match.group("minutes") or 0)
+    seconds = float(match.group("seconds") or 0)
+    total = hours * 3600 + minutes * 60 + seconds
+    return total if total > 0 else None
+
+
+def _raise_tpd_if_applicable(exc: Exception) -> None:
+    if is_tpd_error(exc):
+        raise TPDExhaustedError(
+            f"Groq tokens-per-day (TPD) limit exhausted: {exc}",
+            retry_after_seconds=tpd_retry_after_seconds(exc),
+        ) from exc
 
 
 class APIKeyPool:
@@ -227,7 +284,15 @@ def completion_with_rotation(
     env_var: str = "GROQ_API_KEY",
     **kwargs: Any,
 ) -> Any:
-    """Execute litellm.completion with automatic API key rotation on rate limits."""
+    """Execute litellm.completion with automatic API key rotation on rate limits.
+
+    Tokens-per-day (TPD) exhaustion is handled distinctly from the much shorter
+    tokens-per-minute (TPM) limit: a TPD error still rotates through any remaining
+    keys like any other rate limit (a different key may have its own daily quota),
+    but once every key has been exhausted on a TPD error, this raises
+    TPDExhaustedError instead of the raw provider exception. See TPDExhaustedError
+    for why that matters to callers.
+    """
     if pool is None:
         pool = get_key_pool(provider=provider, env_var=env_var)
 
@@ -235,7 +300,11 @@ def completion_with_rotation(
     total_keys = pool.total_keys()
     if total_keys == 0:
         # If env is empty or not parsed into pool, fallback to default litellm call
-        return litellm.completion(model=model, messages=messages, **kwargs)
+        try:
+            return litellm.completion(model=model, messages=messages, **kwargs)
+        except Exception as exc:
+            _raise_tpd_if_applicable(exc)
+            raise
 
     last_rate_limit_exc: Exception | None = None
 
@@ -258,9 +327,11 @@ def completion_with_rotation(
             if pool.exhausted(attempted):
                 logger.error(f"All {pool.provider.capitalize()} API keys exhausted.")
                 print(f"All {pool.provider.capitalize()} API keys exhausted.")
+                _raise_tpd_if_applicable(exc)
                 raise exc
 
             pool.rotate()
 
     if last_rate_limit_exc:
+        _raise_tpd_if_applicable(last_rate_limit_exc)
         raise last_rate_limit_exc

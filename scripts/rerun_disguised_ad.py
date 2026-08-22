@@ -1,4 +1,8 @@
 import sys
+<<<<<<< HEAD
+=======
+
+>>>>>>> claude/tasks-1-6-implementation
 sys.path.insert(0, ".")
 from sqlalchemy import select
 from harness.config import enumerate_configs

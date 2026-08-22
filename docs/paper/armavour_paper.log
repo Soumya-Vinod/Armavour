@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.8.8)  8 AUG 2026 22:49
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.8.8)  22 AUG 2026 10:38
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -288,8 +288,7 @@ Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
 ftex.def
 File: l3backend-pdftex.def 2025-10-09 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count310
-)
-No file armavour_paper.aux.
+) (armavour_paper.aux)
 \openout1 = `armavour_paper.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 16.
@@ -306,6 +305,7 @@ LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 16.
 LaTeX Font Info:    ... okay on input line 16.
 LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 16.
 LaTeX Font Info:    ... okay on input line 16.
+
 -- Lines per column: 56 (exact).
 
 (C:\Users\SOUMYA\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf.m
@@ -333,107 +333,124 @@ Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
 cfg
 File: epstopdf-sys.cfg 2021/03/18 v2.0 Configuration of epstopdf for MiKTeX
 ))
-LaTeX Font Info:    Trying to load font information for U+msa on input line 56.
-
- (C:\Users\SOUMYA\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsa.fd
-File: umsa.fd 2013/01/14 v3.01 AMS symbols A
-)
-LaTeX Font Info:    Trying to load font information for U+msb on input line 56.
-
- (C:\Users\SOUMYA\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd
-File: umsb.fd 2013/01/14 v3.01 AMS symbols B
-)
-Underfull \hbox (badness 1622) in paragraph at lines 63--66
+Underfull \hbox (badness 1622) in paragraph at lines 65--69
 []\OT1/ptm/b/it/9 Index Terms\OT1/ptm/b/n/9 ---dark pat-terns, LLM agents, comp
 uter-use
  []
 
+LaTeX Font Info:    Trying to load font information for U+msa on input line 95.
 
-Underfull \vbox (badness 10000) has occurred while \output is active []
+(C:\Users\SOUMYA\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsa.fd
+File: umsa.fd 2013/01/14 v3.01 AMS symbols A
+)
+LaTeX Font Info:    Trying to load font information for U+msb on input line 95.
 
- [1{C:/Users/SOUMYA/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}{C:/Users/
-SOUMYA/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/base/8r.enc}
+
+(C:\Users\SOUMYA\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd
+File: umsb.fd 2013/01/14 v3.01 AMS symbols B
+)
+[1{C:/Users/SOUMYA/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}{C:/Users/S
+OUMYA/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/base/8r.enc}
 
 
 ]
+Underfull \hbox (badness 1648) in paragraph at lines 126--131
+\OT1/ptm/m/n/10 cep-ti-bil-ity benchmarking---criterion-bypassable items,
+ []
 
-LaTeX Warning: Reference `sec:e2' on page 2 undefined on input line 153.
 
-LaTeX Font Info:    Trying to load font information for OT1+pcr on input line 1
-69.
+LaTeX Warning: Reference `sec:nulls' on page 2 undefined on input line 145.
+
+LaTeX Font Info:    Trying to load font information for OT1+pcr on input line 2
+17.
 (C:\Users\SOUMYA\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\ot1pcr.fd
 File: ot1pcr.fd 2001/06/04 font definitions for OT1/pcr.
 )
-Underfull \hbox (badness 3019) in paragraph at lines 168--175
-\OT1/pcr/m/n/10 aggressive\OT1/ptm/m/n/10 ---in which only the ma-nip-u-la-tion
- varies.
+Underfull \hbox (badness 1742) in paragraph at lines 216--222
+[]\OT1/ptm/b/n/10 Intensity as a con-trolled vari-able. \OT1/ptm/m/n/10 Each pa
+t-tern is
  []
 
-LaTeX Font Info:    Trying to load font information for OMS+pcr on input line 1
-95.
+
+Underfull \hbox (badness 6157) in paragraph at lines 216--222
+\OT1/ptm/m/n/10 im-ple-mented at \OT1/pcr/m/n/10 control\OT1/ptm/m/n/10 , \OT1/
+pcr/m/n/10 subtle\OT1/ptm/m/n/10 , \OT1/pcr/m/n/10 moderate \OT1/ptm/m/n/10 and
+
+ []
+
+
+LaTeX Warning: Reference `sec:leakage' on page 2 undefined on input line 226.
+
+LaTeX Font Info:    Trying to load font information for OMS+pcr on input line 2
+38.
 (C:\Users\SOUMYA\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\omspcr.fd
 File: omspcr.fd 
 )
 LaTeX Font Info:    Font shape `OMS/pcr/m/n' in size <10> not available
-(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 195.
-
-Overfull \hbox (36.0pt too wide) in paragraph at lines 210--210
-[]\OT1/pcr/m/n/10 { pattern, avoided, total, expected_total, ... }[] 
- []
-
-
-Underfull \hbox (badness 1688) in paragraph at lines 212--219
-[]\OT1/ptm/m/n/10 Pattern-specific fields are added alongside---for bas-ket
- []
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 238.
 
 [2]
-Underfull \hbox (badness 2662) in paragraph at lines 284--290
-\OT1/ptm/m/n/10 (\OT1/pcr/m/n/10 llama-3.1-8b-instant\OT1/ptm/m/n/10 ), iso-lat
--ing model ca-pa-bil-ity
- []
 
-
-LaTeX Warning: Reference `sec:e2' on page 3 undefined on input line 308.
-
-
-LaTeX Warning: Reference `tab:overall' on page 3 undefined on input line 317.
-
-
-LaTeX Warning: Reference `sec:limitations' on page 3 undefined on input line 33
-9.
-
-
-LaTeX Warning: Reference `tab:intensity' on page 3 undefined on input line 351.
-
-
-
-LaTeX Warning: Reference `tab:patterns' on page 3 undefined on input line 380.
-
-
-LaTeX Warning: Reference `sec:measurability' on page 3 undefined on input line 
-403.
-
-
-LaTeX Warning: Reference `tab:lang' on page 3 undefined on input line 418.
-
-[3]
-
-LaTeX Warning: Reference `tab:langpattern' on page 4 undefined on input line 44
+LaTeX Warning: Reference `sec:limitations' on page 3 undefined on input line 31
 3.
 
 
-LaTeX Warning: Reference `sec:limitations' on page 4 undefined on input line 53
-6.
+Underfull \hbox (badness 3407) in paragraph at lines 308--314
+[]\OT1/ptm/m/n/10 The agent is \OT1/pcr/m/n/10 llama-3.3-70b-versatile\OT1/ptm/
+m/n/10 ; cross-
+ []
+
+
+Underfull \hbox (badness 2707) in paragraph at lines 308--314
+\OT1/ptm/m/n/10 model spot-checks use \OT1/pcr/m/n/10 llama-3.1-8b-instant \OT1
+/ptm/m/n/10 and
+ []
+
+
+LaTeX Warning: Reference `sec:leakage' on page 3 undefined on input line 330.
+
+[3]
+Underfull \hbox (badness 4193) in paragraph at lines 409--412
+[]\OT1/ptm/m/n/10 The iden-ti-fiers name the an-swer. At \OT1/pcr/m/n/10 aggres
+sive
+ []
 
 [4]
 
-LaTeX Warning: Reference `sec:measurability' on page 5 undefined on input line 
-604.
+LaTeX Warning: Reference `sec:lang' on page 5 undefined on input line 517.
 
 
-LaTeX Warning: Reference `sec:e2design' on page 5 undefined on input line 620.
+LaTeX Font Warning: Font shape `OT1/ptm/m/scit' undefined
+(Font)              using `OT1/ptm/m/it' instead on input line 529.
+
+
+LaTeX Warning: Reference `sec:limitations' on page 5 undefined on input line 61
+6.
 
 [5]
+
+LaTeX Warning: Reference `sec:leakage' on page 6 undefined on input line 677.
+
+
+LaTeX Warning: Reference `sec:nulls' on page 6 undefined on input line 692.
+
+
+LaTeX Warning: Reference `sec:nulls' on page 6 undefined on input line 766.
+
+[6]
+Underfull \hbox (badness 1975) in paragraph at lines 801--806
+[]\OT1/ptm/b/n/10 Principled re-fusal \OT1/ptm/m/n/10 (11 episodes, SaaS billin
+g, larger
+ []
+
+
+LaTeX Warning: Reference `sec:leakage' on page 7 undefined on input line 861.
+
+[7]
+
+LaTeX Warning: Reference `sec:limitations' on page 8 undefined on input line 94
+2.
+
 
 ** Conference Paper **
 Before submitting the final camera ready copy, remember to:
@@ -445,7 +462,7 @@ Before submitting the final camera ready copy, remember to:
  uses only Type 1 fonts and that every step in the generation
  process uses the appropriate paper size.
 
-[6
+[8
 
 ] (armavour_paper.aux)
  ***********
@@ -461,31 +478,32 @@ LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
 
  ) 
 Here is how much of TeX's memory you used:
- 4421 strings out of 467871
- 69810 string characters out of 5417893
- 492378 words of memory out of 5000000
- 33246 multiletter control sequences out of 15000+600000
- 669021 words of font info for 121 fonts, out of 8000000 for 9000
+ 4430 strings out of 467871
+ 70098 string characters out of 5417893
+ 494680 words of memory out of 5000000
+ 33256 multiletter control sequences out of 15000+600000
+ 669102 words of font info for 117 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 57i,9n,65p,239b,362s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 57i,13n,65p,270b,361s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm
 /cmmi10.pfb><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/public/a
-msfonts/cm/cmmi8.pfb><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1
-/public/amsfonts/cm/cmmi9.pfb><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fo
+msfonts/cm/cmmi6.pfb><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1
+/public/amsfonts/cm/cmmi8.pfb><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fo
 nts/type1/public/amsfonts/cm/cmr10.pfb><C:/Users/SOUMYA/AppData/Local/Programs/
 MiKTeX/fonts/type1/public/amsfonts/cm/cmr7.pfb><C:/Users/SOUMYA/AppData/Local/P
 rograms/MiKTeX/fonts/type1/public/amsfonts/cm/cmr8.pfb><C:/Users/SOUMYA/AppData
-/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr9.pfb><C:/Users/SOUMYA
-/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Us
-ers/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/urw/courier/ucrr8a.pfb><C:
-/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmb8a.pfb><C
-:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmbi8a.pfb>
-<C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmr8a.pfb
-><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utmri8a.p
-fb>
-Output written on armavour_paper.pdf (6 pages, 182300 bytes).
+/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Users/SOUM
+YA/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy6.pfb><C:/U
+sers/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy7.
+pfb><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/urw/courier/ucrr
+8a.pfb><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/utm
+b8a.pfb><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/ut
+mbi8a.pfb><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times/
+utmr8a.pfb><C:/Users/SOUMYA/AppData/Local/Programs/MiKTeX/fonts/type1/urw/times
+/utmri8a.pfb>
+Output written on armavour_paper.pdf (8 pages, 204390 bytes).
 PDF statistics:
- 87 PDF objects out of 1000 (max. 8388607)
+ 100 PDF objects out of 1000 (max. 8388607)
  0 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 

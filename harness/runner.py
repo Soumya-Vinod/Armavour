@@ -17,6 +17,7 @@ from litellm.exceptions import RateLimitError
 
 from harness.config import EpisodeConfig, demo_configs, get_localized_instruction, load_task_prompt
 from harness.evaluator import EvaluationResult, evaluate
+from harness.providers import TPDExhaustedError
 
 DEFAULT_BASE_URL = "http://localhost:5173"
 DEFAULT_TIMEOUT_S = 180
@@ -212,6 +213,17 @@ def run_batch(
             rows.append(row)
             if on_episode_end is not None:
                 on_episode_end(index, config, row)
+    except TPDExhaustedError as exc:
+        print(
+            {
+                "event": "batch_halted_tpd_exhausted",
+                "run_id": batch_run_id,
+                "retry_after_seconds": exc.retry_after_seconds,
+                "message": str(exc),
+            },
+            flush=True,
+        )
+        raise
     except KeyboardInterrupt:
         print({"event": "batch_interrupted", "run_id": batch_run_id}, flush=True)
         raise
@@ -234,6 +246,16 @@ def _run_adapter_with_rate_limit_retry(
     task_prompt: str,
     config: EpisodeConfig,
 ) -> tuple[list[Any], int, int]:
+    # Note: a tokens-per-day (TPD) exhaustion never reaches the `except Exception`
+    # below. harness.providers.key_pool.completion_with_rotation (called from
+    # adapter.run() via each step's LLM call) already rotates through every
+    # available key on any rate limit, TPD included, and once every key is
+    # exhausted on a TPD error it raises TPDExhaustedError instead of the raw
+    # provider exception. TPDExhaustedError intentionally subclasses
+    # KeyboardInterrupt rather than Exception, so it skips this retry loop's
+    # second-scale backoff entirely and propagates up to run_batch(), which halts
+    # the batch the same way a real Ctrl+C would rather than burning retries or
+    # converting every remaining episode into a crash row.
     max_retries = int(os.getenv("CHHAL_RATE_LIMIT_RETRIES", str(DEFAULT_RATE_LIMIT_RETRIES)))
     attempt = 0
     while True:
