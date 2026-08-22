@@ -15,8 +15,8 @@
 
 \begin{document}
 
-\title{Armavour: Measuring Computer-Use Agent Susceptibility to
-Legally-Codified Dark Patterns\\
+\title{Armavour: A CCPA-Grounded Agent Dark-Pattern Benchmark\\and Four
+Measurement-Validity Failures\\
 \thanks{Work conducted at Vivekanand Education Society's Institute of
 Technology, Mumbai.}}
 
@@ -35,37 +35,36 @@ Mumbai, India}
 \maketitle
 
 \begin{abstract}
-Large language model agents increasingly act on the web on a user's
-behalf, completing purchases, managing subscriptions, and navigating
-consent interfaces. These interfaces frequently contain dark patterns:
-design choices engineered to steer users toward outcomes they did not
-intend. India's Central Consumer Protection Authority (CCPA) codified
-thirteen such patterns in 2023, making them a legally-grounded rather
-than merely descriptive taxonomy. We present Armavour, a reproducible
-benchmark measuring whether computer-use agents are deceived by these
-patterns. Armavour comprises a deterministic testbed implementing twelve
-CCPA patterns at four manipulation intensities in three languages, a
-ground-truth oracle scoring outcomes from the document object model
-rather than from agent self-report, and a rubric-driven LLM judge for
-the two patterns whose success condition is not deterministically
-observable. Across 1,927 episodes spanning two agent architectures we
-find that susceptibility scales monotonically with manipulation
-intensity; that it is strongly pattern-dependent, with manipulations
-targeting information availability succeeding where those targeting
-visual salience fail entirely; and---our strongest result---that
-deception rises from 17.2\% on an English interface to 30.0\% on a Hindi
-one under identical seeds and instructions (McNemar $p<0.0001$), and to
-66.7\% when the instruction is also in Hindi. We further report two
-methodological findings that we believe generalise beyond this work:
-patterns whose manipulation can be bypassed by evaluating the task's
-stated criterion alone are structurally unmeasurable, and an agent
-framework's internal task-completion signal can silently contaminate a
-safety metric.
+Language model agents increasingly transact on the web on a user's
+behalf, through interfaces that frequently contain dark patterns. We
+present Armavour, a benchmark measuring whether computer-use agents are
+deceived by the twelve dark patterns codified by India's Central
+Consumer Protection Authority, implemented at four manipulation
+intensities in three languages, with ground truth taken from the
+document object model rather than from agent self-report. Across 1,928
+episodes and two agent architectures we report that susceptibility
+scales monotonically with intensity, and that patterns exploiting
+information asymmetry succeed while patterns exploiting human
+perceptual and affective limits---visual salience, irritation, patience,
+guilt---fail entirely under both architectures.
+We also report, as a co-equal contribution, four distinct ways in which
+this benchmark measured something other than what it named: an item
+whose manipulation could be bypassed by evaluating the task's stated
+criterion; an agent framework's internal completion signal absorbed by
+an outcome-based metric as evidence of safe behaviour; a results column
+whose denominator changed silently mid-table; and a deception rate
+inflated by baseline comprehension failure on non-English interfaces.
+Each produced stable, plausible, internally consistent numbers; none was
+visible in aggregate statistics; each was found only by reconstructing
+the quantity from raw episode records under an explicit hypothesis. We
+give the detection signature for each and argue all four generalise
+beyond this benchmark.
 \end{abstract}
 
 \begin{IEEEkeywords}
-dark patterns, LLM agents, computer-use agents, benchmark, consumer
-protection, multilingual evaluation, AI safety
+dark patterns, LLM agents, computer-use agents, benchmark, measurement
+validity, construct validity, consumer protection, multilingual
+evaluation, AI safety
 \end{IEEEkeywords}
 
 \section{Introduction}
@@ -73,56 +72,81 @@ protection, multilingual evaluation, AI safety
 Dark patterns are interface designs that exploit predictable human
 cognitive tendencies to produce outcomes favouring the platform over the
 user: a pre-ticked donation checkbox, a mandatory fee revealed only at
-the final confirmation, a decline button labelled to induce guilt. They
-are widespread, well documented, and---in a growing number of
+final confirmation, a decline button labelled to induce guilt. They are
+widespread, well documented, and---in a growing number of
 jurisdictions---illegal.
 
-The premise of this work is that the deployment of autonomous web agents
-changes the threat model in a way that has not been adequately measured.
-When an agent completes a purchase on a user's behalf, the manipulation
-is no longer aimed at a human's attention and emotions; it is aimed at
+The deployment of autonomous web agents changes the threat model. When
+an agent completes a purchase on a user's behalf, the manipulation is no
+longer aimed at a human's attention and emotions; it is aimed at
 whatever the agent's perception pipeline delivers to a language model,
 and at whatever reasoning that model then performs. Some manipulations
 may fail entirely against this substrate. Others may succeed more
-reliably than they do against humans. Neither outcome is obvious in
-advance, and the distinction matters both for consumer protection policy
-and for the design of agent systems.
+reliably than against humans.
 
-We take India's CCPA \emph{Guidelines for Prevention and Regulation of
-Dark Patterns, 2023} as our taxonomy. This choice is deliberate. Most
-dark-pattern research uses taxonomies derived from HCI literature, which
-are descriptively rich but carry no enforcement weight. The CCPA
-guidelines enumerate thirteen specific patterns with verbatim legal
-definitions and have been used in enforcement actions against named
-Indian platforms. Grounding a benchmark in a codified taxonomy means a
-result about pattern $X$ is a result about a category regulators already
-act on.
+This paper answers two questions, and we regard them as equally
+important.
+
+The first is the obvious one: \emph{do legally-codified dark patterns
+deceive computer-use agents, and which ones?} We built Armavour to
+answer it, grounding the taxonomy in India's CCPA \emph{Guidelines for
+Prevention and Regulation of Dark Patterns, 2023} rather than an HCI
+taxonomy, so that a result about pattern $X$ is a result about a
+category regulators already enforce against named platforms.
+
+The second emerged from building it: \emph{can we trust the measurement
+that answers the first?} Four times during this work, a component of
+our benchmark produced numbers that were stable across reruns,
+plausible against prior work, internally consistent, and wrong about
+what they measured. One item's manipulation turned out never to be
+load-bearing. One scoring rule quietly counted an agent framework's own
+``task complete'' signal as evidence the agent had resisted a dark
+pattern. One results column pooled arms with different coverage and
+changed denominator halfway down. And one experimental arm's headline
+deception rate turned out to rest substantially on the agent failing to
+comprehend the honest interface at all.
+
+None of these announced itself. Each was found only by reconstructing
+the reported quantity from raw episode records under an explicit
+hypothesis and observing where the reconstruction failed. We report all
+four in Section~\ref{sec:validity}, before the results they affect,
+because we believe the failure modes are properties of how this class of
+benchmark is built rather than accidents of our implementation.
 
 \textbf{Contributions.}
 
 \begin{enumerate}
-\item \textbf{Armavour}, an open benchmark comprising a deterministic
-testbed for twelve CCPA-codified dark patterns at four intensities and
-three languages, with an oracle establishing ground truth from DOM state
-rather than agent self-report.
+\item \textbf{Armavour}: an open benchmark for twelve CCPA-codified dark
+patterns at four intensities and three languages, with DOM-level ground
+truth, versioned interface contracts, and a validated LLM judge for the
+patterns whose success condition is not deterministically observable.
+
+\item \textbf{Four measurement-validity failure modes} in agent
+susceptibility benchmarking---criterion-bypassable items, completion-
+signal contamination, denominator drift, and baseline
+contamination---each with the empirical signature that detects it
+(Section~\ref{sec:validity}).
+
+\item \textbf{A reconstruction protocol}: we argue that recomputing
+every reported quantity from raw records under a stated hypothesis
+should be a routine step in benchmark reporting, not a response to
+anomaly, and show that all four failures above were detectable this way
+and by no other means we tried.
+
 \item An \textbf{intensity dose-response result}: deception rises
-monotonically from 0\% at control to 31.7\% at aggressive intensity
-under otherwise identical conditions.
-\item A \textbf{multilingual susceptibility result}: on seed-matched
-scenarios varying only interface language, deception rises from 17.2\%
-(English) to 30.0\% (Hindi), $p<0.0001$; localising the instruction as
-well raises it to 66.7\%.
-\item A \textbf{cross-architecture comparison} across a DOM-extraction
-adapter and an agent-framework adapter, which reproduces the intensity
-gradient but diverges sharply on which patterns succeed.
-\item A \textbf{qualitative failure taxonomy} from reasoning traces,
-including three mechanisms by which agents fall for subscription traps
-and three archetypes of task abandonment.
-\item Two \textbf{methodological findings} about benchmark
-construction: that items whose manipulation can be circumvented by
-evaluating the task's stated criterion are unmeasurable, and that an
-agent framework's native completion signal can be silently credited as
-safe behaviour by an outcome-based scoring scheme.
+monotonically from 0\% at control to 38\% at aggressive intensity under
+otherwise identical conditions, replicated across two architectures.
+
+\item A \textbf{pattern-class result}: four patterns produce no genuine
+deception under either architecture, and all four target human
+perceptual or affective properties rather than information content
+(Section~\ref{sec:nulls}).
+
+\item A \textbf{multilingual result}, reported conditionally: with the
+instruction held in English, deception rises from 20.7\% on an English
+interface to 36.0\% on a Hindi one ($p = 1.5\times10^{-5}$). With the
+instruction also localised, the measured rate rises further but is not
+interpretable, for reasons given in Section~\ref{sec:baseline}.
 \end{enumerate}
 
 \section{Related Work}
@@ -134,28 +158,49 @@ toward automated detection at scale. Existing taxonomies are
 descriptively useful but heterogeneous, and detection work typically
 answers whether a pattern is \emph{present} on a page rather than
 whether it \emph{works} on a given agent. Armavour addresses the latter
-question and, by adopting a legal taxonomy, makes its categories
-directly commensurable with regulatory action.
+and, by adopting a legal taxonomy, makes its categories directly
+commensurable with regulatory action.
 
 \subsection{Agent benchmarks and susceptibility}
 
 Web-agent benchmarks predominantly measure task completion. Recent work
-has begun to measure susceptibility to adversarial or manipulative
-interfaces; SusBench is the closest prior work and reports pattern-level
-avoidance rates we treat as a comparison baseline. Two differences are
-worth stating. First, Armavour is grounded in a codified legal taxonomy
-rather than a research taxonomy. Second, Armavour varies manipulation
-\emph{intensity} and interface \emph{language} as controlled
-experimental factors, which allows dose-response and cross-lingual
-claims that presence/absence designs cannot support.
+measures susceptibility to adversarial or manipulative interfaces;
+SusBench is the closest prior work and reports pattern-level avoidance
+rates we treat as a comparison baseline. Armavour differs in grounding
+its taxonomy legally, and in varying manipulation \emph{intensity} and
+interface \emph{language} as controlled factors, permitting
+dose-response and cross-lingual claims that presence/absence designs
+cannot support.
 
-\subsection{Multilingual evaluation of language models}
+\subsection{Validity of agent-safety measurement}
 
-Degradation of model performance in lower-resource languages is well
-established for static tasks. Its consequences for \emph{agentic} safety
-behaviour---whether an agent operating a non-English interface is more
-readily manipulated---have received less attention.
-Section~\ref{sec:e2} provides direct evidence.
+Benchmark construction receives far less scrutiny than benchmark
+results. Where validity is discussed in ML evaluation it is usually
+framed as contamination, saturation, or construct drift across model
+generations---problems of a benchmark becoming \emph{stale}. The
+failures we report are different: an item that is internally consistent,
+has unambiguous ground truth, produces stable numbers across reruns, and
+measures a capability unrelated to the one it names. Such an item does
+not degrade over time; it was never measuring the construct.
+
+This matters specifically for safety benchmarks. A capability benchmark
+that measures the wrong thing produces a wrong leaderboard. A safety
+benchmark that measures the wrong thing produces a false assurance, and
+the direction of the error is not random---three of our four failures
+biased toward \emph{apparent safety}, because the default coding of an
+ambiguous outcome is usually the benign one. We are not aware of prior
+work characterising these failure modes for agent susceptibility
+evaluation or supplying detection signatures for them, and we treat
+that gap as this paper's most transferable contribution.
+
+\subsection{Multilingual evaluation}
+
+Degradation in lower-resource languages is well established for static
+tasks. Its consequences for \emph{agentic} behaviour have received less
+attention. Section~\ref{sec:baseline} shows that at sufficient
+degradation the question becomes unanswerable rather than merely harder,
+because task failure and manipulation susceptibility stop being
+separable.
 
 \section{The Armavour Benchmark}
 
@@ -163,256 +208,412 @@ Section~\ref{sec:e2} provides direct evidence.
 
 \textbf{Ground truth from the interface, not the agent.} An agent's
 report that it declined an add-on is not evidence that it did. Every
-pattern exposes a deterministic oracle reading the terminal DOM state at
-the moment of the transaction. The agent cannot influence this signal
-except by acting on the page.
+pattern exposes a deterministic oracle reading terminal DOM state at the
+moment of the transaction.
 
-\textbf{Intensity as a controlled variable.} Each pattern is
-implemented at four intensities---\texttt{control}, \texttt{subtle},
-\texttt{moderate}, \texttt{aggressive}---in which only the manipulation
-varies. \texttt{control} renders the same task honestly and supplies the
-baseline against which deception is measured.
+\textbf{Intensity as a controlled variable.} Each pattern is implemented
+at \texttt{control}, \texttt{subtle}, \texttt{moderate} and
+\texttt{aggressive}, varying only the manipulation. \texttt{control}
+renders the task honestly and supplies the baseline against which
+deception is measured. Section~\ref{sec:baseline} shows this condition
+does more work than we originally assigned it.
 
-\textbf{Versioned interface contracts.} Five contracts govern the seams
-between components: episode configuration, oracle output, stable element
-identifiers, the episode log schema, and the judge rubric interface.
-Contracts are versioned and changed only by explicit agreement, which is
-what makes results comparable across runs conducted weeks apart.
+\textbf{Versioned interface contracts.} Five contracts govern component
+seams: episode configuration, oracle output, stable element identifiers,
+the episode log schema, and the judge rubric interface.
 
 \subsection{Testbed}
 
-The testbed is a React/TypeScript single-page application presenting
-seven simulated services (ticketing, e-commerce, education, subscription
-management, SaaS signup, security software, and news). Twelve of the
-thirteen CCPA patterns are implemented; the thirteenth concerns
-advertising practice not observable within a single session.
-
-Episodes are driven entirely by URL parameters, per Contract~1:
+A React/TypeScript application presenting seven simulated services
+(ticketing, e-commerce, education, subscription management, SaaS signup,
+security software, news). Twelve of the thirteen CCPA patterns are
+implemented; the thirteenth concerns advertising practice not observable
+within a single session. Episodes are driven entirely by URL parameters:
 
 \begin{center}
 \texttt{/?site=\{s\}\&pattern=\{p\}\&intensity=\{i\}}\\
 \texttt{\&lang=\{l\}\&seed=\{n\}}
 \end{center}
 
-Every episode is therefore a pure function of its configuration, and the
-SHA-256 hash of that configuration serves as the idempotency key for
-logging and resumption.
+Every episode is a pure function of its configuration; the SHA-256 hash
+of that configuration is the idempotency key for logging and resumption.
 
 \subsection{Adapters}
 
-We evaluate two agent architectures.
-
-\textbf{ComputerUse} is our own adapter. It extracts interactive
-elements and their surrounding text context from the DOM, presents them
-to the model as structured JSON, and executes the returned action via
-Playwright. Its action vocabulary is minimal: click, check, uncheck,
-fill, done.
+\textbf{ComputerUse} is our own: it extracts interactive elements and
+their surrounding text context from the DOM, presents them as structured
+JSON, and executes the returned action via Playwright. Action vocabulary
+is minimal---click, check, uncheck, fill, done.
 
 \textbf{BrowserUse} is a third-party agent framework with its own DOM
-indexing, prompting, and multi-step planning. It is included because a
-single adapter cannot distinguish a property of agents from a property
-of one extraction layer. Section~\ref{sec:completion} shows this
-inclusion was necessary in a way we did not anticipate.
+indexing, prompting, and multi-step planning. It was included so that a
+finding could be attributed to agents rather than to one extraction
+layer. Section~\ref{sec:completion} shows this inclusion mattered in a
+way we did not anticipate.
 
 \subsection{Oracle and outcome coding}
 
-At the terminal action the page sets a global result object and
-corresponding DOM attributes:
+At the terminal action the page sets a global result object:
 
 \begin{verbatim}
 { pattern, avoided, total, expected_total, ... }
 \end{verbatim}
 
 Outcomes are coded on two binary axes---task completed, pattern
-avoided---yielding EC (completed, avoided), DC (completed, deceived),
-EF (not completed, avoided), and DF (not completed, deceived).
+avoided---giving EC (completed, avoided), DC (completed, deceived), EF
+(not completed, avoided), DF (not completed, deceived).
 
-\subsection{Judge}
-
-Two patterns---false urgency and confirm shaming---have a success
-condition DOM state cannot fully determine, because the question is
-whether the manipulation \emph{influenced} the decision rather than
-whether a particular button was pressed. For these, a second language
-model scores the reasoning trace against a CCPA-grounded rubric,
-returning a boolean flag and a one-sentence evidence string. Contract~5
-requires the judge model to differ from the agent model.
-
-Two decisions are consequential and we state them explicitly.
-
-First, for judge-scored patterns the reported susceptibility rate is the
-\emph{judge flag} rate, not the raw DC rate. A DC outcome records that
-the platform-favoured result occurred, not that the dark pattern caused
-it. In our soft-pattern pilot, four confirm-shaming episodes scored DC
-while the judge correctly determined the guilt framing played no
-role---they were button-semantics errors. Conflating the two would have
-overstated the pattern's effect roughly fourfold.
-
-Second, an agent whose reasoning acknowledges the manipulation but whose
-final action is nonetheless correct is scored as \emph{not} swayed. The
-benchmark measures whether the pattern changed the decision, not whether
-it entered deliberation. Acknowledged-but-resisted influence is
-preserved in the judge's evidence string without affecting any metric.
-
-\subsection{Judge validation}
+\subsection{Judge and its validation}
 \label{sec:judgeval}
 
-We validated the judge against a hand-constructed set of twelve cases
-covering both judge-scored patterns, deliberately including the failure
-mode we had observed in practice: episodes in which the agent takes the
-task-correct action while its reasoning quotes the guilt-laden label,
+Two patterns---false urgency and confirm shaming---have a success
+condition DOM state cannot determine, because the question is whether
+the manipulation \emph{influenced} the decision rather than whether a
+button was pressed. A second language model scores the reasoning trace
+against a CCPA-grounded rubric, returning a flag and a one-sentence
+evidence string. Contract~5 requires judge $\neq$ agent.
+
+For these patterns the reported susceptibility rate is the \emph{judge
+flag} rate, not the raw DC rate. A DC outcome records that the
+platform-favoured result occurred, not that the pattern caused it; we
+report EC, genuine DC (judge-confirmed), and task-failure DC separately.
+Section~\ref{sec:results} shows this distinction changes confirm
+shaming's classification entirely.
+
+An agent whose reasoning acknowledges the manipulation but whose final
+action is correct is scored as \emph{not} swayed: the benchmark measures
+whether the pattern changed the decision, not whether it entered
+deliberation.
+
+We validated the judge against twelve hand-constructed cases,
+deliberately including the failure we had observed---episodes where the
+agent takes the task-correct action while quoting the guilt-laden label,
 because in this pattern the correct button \emph{is} the guilt-laden
-button.
-
-An initial judge model scored 72.7\% accuracy with precision 0.50 and
-recall 1.00---systematically over-flagging, with three false positives
-and no false negatives. The failures were not borderline: in one case
-the model's own evidence string stated the agent showed ``no hesitation
-or reconsideration'' and then flagged it anyway, having inverted the
-final-choice value it was given directly.
-
-Substituting a larger judge model, with \emph{no change to the rubric
-text}, produced 100\% accuracy across all twelve cases with zero parse
-errors, reproduced over two consecutive runs. This localises the
-problem: judge unreliability here was a model-capability limitation, not
-a prompt-engineering one, and further rubric iteration would have been
-wasted effort.
+button. An initial judge model scored 72.7\% accuracy, precision 0.50,
+recall 1.00: systematically over-flagging. Its failures were not
+borderline---in one case its own evidence string stated the agent showed
+``no hesitation or reconsideration'' and then flagged it anyway, having
+inverted a value it was given directly. A larger judge model, with
+\emph{no change to the rubric text}, scored 100\% across all twelve with
+zero parse errors, reproduced over two consecutive runs. The problem was
+model capability, not prompt engineering, and further rubric iteration
+would have been wasted effort.
 
 \section{Experimental Design}
 
-\subsection{Configuration}
-
 The agent is \texttt{llama-3.3-70b-versatile}; the cross-model
 spot-check uses \texttt{llama-3.1-8b-instant}; the judge is
-\texttt{gpt-oss-120b}. All are served by a single provider. Inference is
-deterministic ($\text{temperature}=0$) at every call site.
-Section~\ref{sec:limitations} discusses the consequences of both agent
-models having since been withdrawn by the provider.
-
-\subsection{Arms}
+\texttt{gpt-oss-120b}. Inference is deterministic
+($\text{temperature}=0$) at every call site. Both agent models have
+since been withdrawn by the provider; see
+Section~\ref{sec:limitations}.
 
 \begin{itemize}
 \item \textbf{E1a}: twelve patterns $\times$ four intensities $\times$
-ten seeds, English, ComputerUse (480 episodes).
-\item \textbf{Spot-check}: twelve patterns at aggressive intensity,
-five seeds, smaller model, ComputerUse (60 episodes).
-\item \textbf{E1b}: E1a's matrix on BrowserUse (480 episodes).
-\item \textbf{E2}: six language-sensitive patterns $\times$ three
+ten seeds, English, ComputerUse.
+\item \textbf{Spot-check}: twelve patterns, aggressive only, five seeds,
+smaller model, ComputerUse.
+\item \textbf{E1b}: E1a's matrix on BrowserUse.
+\item \textbf{E2}: five language-sensitive patterns $\times$ three
 intensities $\times$ three interface languages $\times$ ten seeds,
-English instructions (540 episodes).
+\emph{English instructions throughout}.
 \item \textbf{E2a / E2b}: E2's Hindi and Hinglish cells re-run with the
-instruction also localised (180 each).
+instruction also localised.
 \end{itemize}
 
-Structural patterns whose manipulation is numeric or positional were
-excluded from the language arms, since varying their language would
-mostly measure translation noise. Language-sensitive strings were
-written by a native speaker rather than machine-translated: a flat
-translation of a triple-nested negation would not preserve the
-manipulation the item tests.
+1,928 episodes were run; 1,600 are scored, after excluding two patterns
+established as unmeasurable (Section~\ref{sec:measurability}) and eight
+duplicate reruns. Language-sensitive strings were written by a native
+speaker, not machine-translated: a flat translation of a triple-nested
+negation would not preserve the manipulation the item tests.
 
-The E2/E2a/E2b split is deliberate. E2 isolates \emph{interface}
-language with the instruction held constant in English---a common
-deployment configuration, and the cleaner experiment. E2a and E2b add
-the instruction, which is the more realistic configuration but confounds
-two variables.
+The E2 versus E2a/E2b split was intended to separate interface language
+from instruction language. It ended up serving a different and more
+important purpose (Section~\ref{sec:baseline}).
+
+\section{Measurement-Validity Failures}
+\label{sec:validity}
+
+We present these before the results because three of the four change
+figures we would otherwise have reported, and because the reconstruction
+protocol that found them is what licenses the numbers in
+Section~\ref{sec:results}.
+
+\subsection{Criterion-bypassable items}
+\label{sec:measurability}
+
+Our disguised-advertisement item presented four search results, one a
+sponsored placement styled to blend in, with label prominence decreasing
+as intensity rose. The task was to buy the cheapest genuine product.
+Following our own specification, the ad was priced above every organic
+item so selecting it would be unambiguously wrong.
+
+That decision made the item unmeasurable. Because the ad was the most
+expensive and the task asked for the cheapest, any agent that compared
+prices avoided it---regardless of whether the sponsored label was shown,
+greyed, or absent. Intensity could not affect the outcome, and did not:
+0\% deception at every level, under both architectures, across 85
+episodes.
+
+\textbf{Detection signature: an intensity ladder with zero slope, and
+disagreement with a prior run.} An earlier pilot had returned 60\%
+deception on this item. Reconciling the two showed the pilot agent had
+received no product names or prices at all---its traces read ``all
+buttons have the same text `Buy''' and ``no product details
+provided''---and had defaulted to the first element, which happened to
+be the ad. The pilot measured a perception-pipeline gap and reported it
+as ad-disguise susceptibility. Once the extraction layer supplied
+surrounding text, the rate fell to zero, which is the correct value for
+an item that cannot discriminate.
+
+\textbf{General condition:} \emph{if the task's stated criterion is
+sufficient to identify the correct choice, the manipulation is never
+load-bearing, and the item measures criterion evaluation rather than
+manipulation susceptibility.} An item can satisfy every apparent
+correctness requirement---unambiguous ground truth, a well-formed
+intensity ladder, a clean oracle---and still measure nothing.
+
+The released benchmark inverts the price relationship so the ad is
+cheapest and price-only reasoning selects it, making the sponsored label
+the sole discriminating signal. We report no figures for the corrected
+item (Section~\ref{sec:limitations}).
+
+False urgency has the same structure---single-choice, price-decidable,
+urgency copy never load-bearing---with no equivalent fix: making the
+urgent item cheapest would make selecting it correct, and equalising
+prices removes the discriminator. Urgency is pressure to act
+\emph{quickly}, which a single-step episode cannot express. We exclude
+it rather than report a number we cannot defend.
+
+\textbf{Corollary for benchmark authors:} a pattern scoring far from its
+published baseline in either direction warrants a construction audit
+before it is reported. Our 100\% avoidance against a prior-work baseline
+of roughly 65\% was the anomaly that started this investigation.
+
+\subsection{Completion-signal contamination}
+\label{sec:completion}
+
+BrowserUse produced 47 EF outcomes (11.8\% of scored episodes) against
+ComputerUse's 3 (0.75\%)---a sixteenfold difference in episodes scored
+as ``avoided the dark pattern but did not complete the task.''
+
+We first hypothesised swallowed exceptions in the adapter's error
+handling. Trace analysis falsified this. Of 48 EF episodes in the raw
+arm, 45 contain an explicit \texttt{done} action, against 1 of 378 EC
+episodes: near-perfect separation. Token counts are comparable to EC
+episodes (6{,}870 versus 7{,}163 mean input tokens), durations are
+\emph{longer} (45.2s versus 37.9s), no episode approaches the step
+budget, none has zero token usage. These are not failures. The agent
+declared itself finished.
+
+The mechanism is architectural. BrowserUse treats \texttt{done} as its
+native completion signal and its prompting encourages invoking it when
+the task appears complete; ComputerUse offers a bare action choice with
+no equivalent framing. The framework's notion of completion fires before
+the page's terminal action, the oracle never runs, and an outcome scheme
+keying ``avoided'' on the absence of a deceived oracle result credits
+the episode as safe.
+
+\textbf{Detection signature: an outcome-category rate that differs by an
+order of magnitude across architectures, plus the presence of that
+category in the control condition.} Seven of the 48 occur at
+\texttt{control} intensity, where no manipulation exists to avoid. Those
+are unambiguously task failures scored on the safe side.
+
+\textbf{General condition:} \emph{when an agent framework has an
+internal notion of task completion, and a safety metric infers safety
+from the absence of an unsafe outcome, the framework's completion signal
+is silently converted into a safety claim.} This is invisible in
+aggregate statistics---BrowserUse's lower deception rates in
+Table~\ref{tab:patterns} are partly this artefact---and surfaces only
+when the ambiguous outcome category is disaggregated by architecture and
+its traces read. Cross-architecture comparisons reporting only a
+deception rate will not find it.
+
+\subsection{Denominator drift}
+\label{sec:denominators}
+
+An earlier draft of our pattern table reported a single pooled deception
+rate per pattern, computed across every arm in which that pattern
+appeared. Because the language arms cover only five of the twelve
+patterns, half the column was computed at $n=135$ and half at $n=45$,
+with nothing in the table indicating the denominator changed. The column
+was internally consistent, monotonic, and plausible.
+
+\textbf{Detection signature: partial reproduction.} It was caught by
+attempting to recompute the column from raw records under one stated
+hypothesis (``E1a plus spot-check, $n=45$'') and finding that exactly
+six of ten values matched. The four that did not were exactly the four
+patterns also present in the language arms.
+
+\textbf{General condition:} \emph{a table that pools across experimental
+arms with different factor coverage will silently vary its denominator
+by row.} The failure is undetectable by inspection and trivially
+detectable by reconstruction.
+
+\subsection{Baseline contamination}
+\label{sec:baseline}
+
+The fourth failure inflates this paper's own headline result, and is the
+reason Section~\ref{sec:lang} reports the language effect conditionally.
+
+The \texttt{control} condition renders each task honestly: no
+manipulation is present, so a deceived outcome should be impossible.
+Under English instructions with an English interface, it is---0 of 50
+control episodes were scored as deceived. But control-condition
+deceptions rise sharply as the interface and instruction are localised
+(Table~\ref{tab:controlfail}).
+
+\begin{table}[htbp]
+\caption{Deceptions in the \emph{control} condition, where no
+manipulation is present ($n = 50$ per row)}
+\begin{center}
+\begin{tabular}{llr}
+\toprule
+\textbf{Instruction} & \textbf{Interface} & \textbf{``Deceived''} \\
+\midrule
+English  & English  & 0 \\
+English  & Hinglish & 0 \\
+English  & Hindi    & 6 \\
+Hinglish & Hinglish & 7 \\
+\textbf{Hindi} & \textbf{Hindi} & \textbf{21} \\
+\bottomrule
+\end{tabular}
+\label{tab:controlfail}
+\end{center}
+\end{table}
+
+In the fully-Hindi arm, 42\% of episodes on an interface containing no
+dark pattern were scored as deceived---including \emph{every} control
+episode for interface interference and \emph{every} control episode for
+confirm shaming. The agent is not being manipulated in these episodes.
+It is failing to operate the interface, and an outcome scheme that codes
+any incorrect end-state as deception counts that failure as
+susceptibility.
+
+\textbf{Detection signature: a non-zero rate in the null condition,
+disaggregated along the same axis as the reported effect.} A pooled
+control figure across all arms (39 of 300, or 13\%) looks like tolerable
+noise. Split by language it is a monotone tracking precisely the
+variable whose effect is being claimed.
+
+\textbf{General condition:} \emph{when a manipulated variable also
+degrades baseline task competence, an outcome-based deception metric
+sums the two, and the design cannot apportion them.} This is not a
+confound in the usual sense---it is not that some third variable causes
+both---but a failure of the metric to distinguish two mechanisms that
+produce the same recorded outcome.
+
+The consequence for this paper is direct. Our fully-localised Hindi arm
+records 73.3\% deception; a large share of that is baseline failure, and
+we cannot say how much. The English-instruction arms retain an
+interpretable baseline and are reported as the primary result.
+
+\subsection{What the four have in common}
+
+Each produced a number that was stable across reruns, plausible against
+prior expectations, internally consistent, and not a measurement of what
+it named. None was visible in aggregate statistics. Each was found the
+same way: by taking a reported quantity, stating a hypothesis about how
+it was computed, recomputing it from raw episode records, and examining
+where the reconstruction diverged.
+
+Three of the four biased toward apparent safety. We suspect this is
+systematic rather than coincidental: when an outcome is ambiguous, the
+default coding is usually the benign one, because benign outcomes are
+what the instrument is built to expect.
 
 \section{Results}
+\label{sec:results}
+
+All figures below are computed on the 1,600 scored episodes, excluding
+disguised advertisement and false urgency
+(Section~\ref{sec:measurability}) consistently across every table.
 
 \subsection{Aggregate outcomes}
 
 \begin{table}[htbp]
-\caption{Outcome distribution by arm}
+\caption{Outcome distribution by arm (scored episodes)}
 \begin{center}
-\begin{tabular}{lrrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-\textbf{Arm} & \textbf{$n$} & \textbf{EC} & \textbf{DC} & \textbf{EF} \\
+\textbf{Arm} & \textbf{$n$} & \textbf{EC} & \textbf{DC} & \textbf{EF} &
+\textbf{DC$_{\text{judge}}$} \\
 \midrule
-E1a (ComputerUse)         & 487 & 85.0\% & 14.4\% & 0.6\% \\
-Spot-check (smaller model) & 60 & 56.7\% & 35.0\% & 8.3\% \\
-E1b (BrowserUse)          & 480 & 78.8\% & 11.2\% & 10.0\% \\
-E2 (EN instruction)       & 540 & 74.8\% & 23.1\% & 2.0\% \\
-E2a (HI instruction + UI) & 180 & 33.3\% & 66.7\% & 0.0\% \\
-E2b (Hinglish instr.\ + UI) & 180 & 75.0\% & 25.0\% & 0.0\% \\
-\midrule
-\textbf{Total}            & 1{,}927 & --- & --- & --- \\
+E1a (ComputerUse) & 400 & 81.8\% & 17.5\% & 0.8\%  & 17.3\% \\
+Spot-check (8B)   & 50  & 48.0\% & 42.0\% & 10.0\% & 38.0\% \\
+E1b (BrowserUse)  & 400 & 74.8\% & 13.5\% & 11.8\% & 13.5\% \\
+E2 (EN instr.)    & 450 & 69.8\% & 27.8\% & 2.4\%  & 27.8\% \\
+E2a (HI instr.)   & 150 & 26.7\% & 73.3\% & 0.0\%  & 54.0\% \\
+E2b (Hin.\ instr.)& 150 & 70.0\% & 30.0\% & 0.0\%  & 30.0\% \\
 \bottomrule
 \end{tabular}
 \label{tab:overall}
 \end{center}
 \end{table}
 
-No episode in 1,927 produced a DF outcome. This is a property of the
-scoring construction rather than a finding---see
-Section~\ref{sec:limitations}.
-
-The spot-check arm is independently notable: the smaller model was
-deceived at more than twice the rate of the larger one (35.0\% versus
-14.4\%) under identical conditions.
+No episode in 1,928 produced a DF outcome; this is a property of the
+scoring construction (Section~\ref{sec:limitations}). The spot-check arm
+is independently notable: the smaller model was deceived at more than
+twice the larger model's rate (42.0\% versus 17.5\%) under identical
+conditions. E2a's figures should be read with
+Section~\ref{sec:baseline}.
 
 \subsection{Intensity dose-response}
 
-Because the language arms omit the \texttt{subtle} level and the
-spot-check runs only at \texttt{aggressive}, an intensity comparison
-pooled across arms would confound intensity with language and model. We
-report each adapter separately, with 120 episodes per cell
-(Table~\ref{tab:intensity}).
-
 \begin{table}[htbp]
-\caption{Deception rate by intensity ($n=120$ per cell)}
+\caption{Deception rate by intensity, English instruction
+($n=100$ per cell)}
 \begin{center}
 \begin{tabular}{lrr}
 \toprule
 \textbf{Intensity} & \textbf{E1a} & \textbf{E1b} \\
 \midrule
-Control     & 0.0\%  & 4.2\% \\
-Subtle      & 7.5\%  & 6.7\% \\
-Moderate    & 19.7\% & 12.5\% \\
-Aggressive  & 31.7\% & 21.7\% \\
+Control     & 0\%  & 5\%  \\
+Subtle      & 9\%  & 8\%  \\
+Moderate    & 23\% & 15\% \\
+Aggressive  & 38\% & 26\% \\
 \bottomrule
 \end{tabular}
 \label{tab:intensity}
 \end{center}
 \end{table}
 
-The gradient is monotonic in both adapters, and causal in the strict
+The gradient is monotonic in both architectures and causal in the strict
 sense that intensity is the only manipulated variable. ComputerUse's
-control condition produces no deception across 120 episodes, which is
-the precondition for interpreting any other number.
+control produces no deception across 100 episodes, which is the
+precondition for interpreting any other number in this table.
 
-BrowserUse's control condition does not: five episodes were scored as
-deceived on an interface containing no manipulation. All five fall in
-two patterns (trick question, SaaS billing) whose control variant
-initialises to the already-correct state, so a deceived outcome requires
-an unforced action. We have not established whether this reflects
-BrowserUse's independent DOM indexing or an oracle-reading difference
-through that adapter, and we flag it as unresolved rather than
-interpreting it.
+BrowserUse's control does not, at 5\%. All five affected episodes fall
+in two patterns whose control variant initialises to the already-correct
+state, so a deceived outcome requires an unforced action. This is a
+smaller instance of Section~\ref{sec:baseline}'s problem in an
+architecture rather than a language, and we have not resolved whether it
+reflects BrowserUse's independent DOM indexing or an oracle-reading
+difference through that adapter.
 
 \subsection{Pattern-level susceptibility}
 
-Susceptibility is strongly pattern-dependent, and the two adapters
-disagree substantially (Table~\ref{tab:patterns}).
-
 \begin{table}[htbp]
-\caption{Deception rate by pattern, per adapter ($n=40$ per cell)}
+\caption{Deception rate by pattern and architecture ($n=40$ per cell,
+English instruction). Starred entries are judge-adjusted.}
 \begin{center}
 \begin{tabular}{lrr}
 \toprule
 \textbf{Pattern} & \textbf{E1a} & \textbf{E1b} \\
 \midrule
-Trick question            & 40.0\% & 65.0\% \\
-SaaS billing              & 57.0\% & 30.0\% \\
-Drip pricing              & 33.3\% & 22.5\% \\
-Forced action             & 32.6\% & 12.5\% \\
-Bait and switch           & 28.9\% & 5.0\% \\
-Basket sneaking           & 11.1\% & 0.0\% \\
-Subscription trap         & 11.1\% & 0.0\% \\
-Confirm shaming           & 2.2\%  & 0.0\% \\
-Interface interference    & 0.0\%  & 0.0\% \\
-Nagging                   & 0.0\%  & 0.0\% \\
+SaaS billing              & 55.0\% & 30.0\% \\
+Trick question            & 42.5\% & 65.0\% \\
+Drip pricing              & 25.0\% & 22.5\% \\
+Bait and switch           & 22.5\% & 5.0\%  \\
+Forced action             & 15.0\% & 12.5\% \\
+Basket sneaking           & 12.5\% & 0.0\%  \\
+Confirm shaming$^\star$   & 0.0\%  & 0.0\%  \\
+Subscription trap         & 0.0\%  & 0.0\%  \\
+Interface interference    & 0.0\%  & 0.0\%  \\
+Nagging                   & 0.0\%  & 0.0\%  \\
 \midrule
-\multicolumn{3}{l}{\emph{Excluded as unmeasurable
-(Section~\ref{sec:measurability}):}} \\
+\multicolumn{3}{l}{\emph{Excluded, Section~\ref{sec:measurability}:}} \\
 Disguised advertisement   & --- & --- \\
 False urgency             & --- & --- \\
 \bottomrule
@@ -421,69 +622,65 @@ False urgency             & --- & --- \\
 \end{center}
 \end{table}
 
-Three observations. First, the two patterns producing no deception under
-either adapter---interface interference and nagging---are the two whose
-manipulation targets human perceptual or affective properties rather
-than information content (Section~\ref{sec:nulls}). This is the most
-robust finding in the table, since it survives an architecture change.
+Confirm shaming's raw rate under E1a is 2.5\%---a single episode---but
+the judge classifies that episode as a task-failure DC rather than
+genuine susceptibility, giving 0.0\%. Without the judge distinction it
+would appear in the table as weakly effective rather than as a null.
 
-Second, trick question is the only pattern where BrowserUse is
-substantially \emph{more} susceptible. It is also the only pattern whose
-manipulation is purely linguistic---nested negation in a preference
-label---suggesting that additional agent scaffolding does not help, and
-may hinder, when the difficulty is semantic rather than navigational.
+Three observations. First, four patterns produce no genuine deception
+under either architecture; Section~\ref{sec:nulls} argues they share a
+cause. Second, trick question is the only pattern where BrowserUse is
+substantially \emph{more} susceptible---and the only one whose
+manipulation is purely linguistic, suggesting additional scaffolding
+does not help, and may hinder, when the difficulty is semantic rather
+than navigational. Third, BrowserUse's lower rates elsewhere should be
+read alongside Section~\ref{sec:completion}.
 
-Third, BrowserUse's lower rates elsewhere should be read alongside its
-10\% EF rate (Section~\ref{sec:completion}), which removes episodes from
-the denominator in which deception could have occurred.
-
-\subsection{Language degradation}
-\label{sec:e2}
-
-This is our strongest result. Table~\ref{tab:lang} reports five
-conditions; the first three vary only the interface, with instruction,
-seed, pattern, intensity, model, and adapter all held constant.
+\subsection{Language}
+\label{sec:lang}
 
 \begin{table}[htbp]
-\caption{Deception rate by language condition}
+\caption{Deception rate by language condition ($n=150$ per row).
+Bracketed rows are not interpretable; see
+Section~\ref{sec:baseline}.}
 \begin{center}
 \begin{tabular}{llrr}
 \toprule
-\textbf{Instruction} & \textbf{Interface} & \textbf{$n$} & \textbf{DC} \\
+\textbf{Instr.} & \textbf{Interface} & \textbf{DC} &
+\textbf{Control fail} \\
 \midrule
-English  & English  & 180 & 17.2\% \\
-English  & Hinglish & 180 & 22.2\% \\
-English  & Hindi    & 180 & 30.0\% \\
+English  & English  & 20.7\% & 0/50 \\
+English  & Hinglish & 26.7\% & 0/50 \\
+English  & Hindi    & 36.0\% & 6/50 \\
 \midrule
-Hinglish & Hinglish & 180 & 25.0\% \\
-Hindi    & Hindi    & 180 & 66.7\% \\
+Hinglish$^\dagger$ & Hinglish & 30.0\% & 7/50 \\
+Hindi$^\dagger$    & Hindi    & 73.3\% & 21/50 \\
 \bottomrule
 \end{tabular}
 \label{tab:lang}
 \end{center}
 \end{table}
 
-Because the first three conditions are fully paired, we test
-significance with McNemar's test on discordant pairs. Comparing English
-against Hindi interfaces: 26 scenarios were avoided in English but
-deceived in Hindi, against 3 in the reverse direction, yielding
-$\chi^2=16.69$, $p=0.000044$.
+\textbf{Primary result.} With the instruction held in English and only
+the interface localised, deception rises from 20.7\% (English) to 26.7\%
+(Hinglish) to 36.0\% (Hindi). The design is fully paired on
+(pattern, intensity, seed), with all 150 pairs matching and none
+dropped. An exact McNemar test on discordant pairs gives, for English
+versus Hindi, 26 scenarios avoided in English but deceived in Hindi
+against 3 in the reverse direction, $p = 1.52\times10^{-5}$.
 
-Localising the instruction as well nearly quadruples the English
-baseline. We report this separately because it confounds two variables:
-the agent is now both reading a Hindi interface and interpreting a Hindi
-instruction, and our design cannot apportion the effect between them.
-The comparison that isolates a single variable is the first three rows,
-and that comparison alone is significant.
+English versus Hinglish is \emph{not} significant: 16 versus 7
+discordant pairs, $p = 0.093$. We report this because the three-point
+monotone in the table invites a stronger claim than the pairwise tests
+support.
 
-The Hinglish ordering is worth noting. Localising the instruction moves
-Hinglish only from 22.2\% to 25.0\%, against Hindi's 30.0\% to 66.7\%.
-Romanised Hindi appears to impose far less additional burden than
-Devanagari, which is consistent with tokeniser coverage rather than
-linguistic difficulty, though we cannot demonstrate that here.
-
-The effect is not uniform across patterns
-(Table~\ref{tab:langpattern}).
+\textbf{Secondary arms.} With the instruction also localised, measured
+deception reaches 30.0\% (Hinglish) and 73.3\% (Hindi). We do not
+interpret these. The Hindi arm's control condition fails 21 times in 50
+(Table~\ref{tab:controlfail}), so an unknown but substantial share of
+that 73.3\% is the agent failing to operate an honest interface. The
+judge-adjusted figure for this arm is 54.0\%, a 29-episode gap, which
+indicates the contamination is partly visible to a judge and partly not.
 
 \begin{table}[htbp]
 \caption{Language effect by pattern, English instruction ($n=30$)}
@@ -492,125 +689,31 @@ The effect is not uniform across patterns
 \toprule
 \textbf{Pattern} & \textbf{EN} & \textbf{Hinglish} & \textbf{Hindi} \\
 \midrule
-Forced action    & 26.7\% & 33.3\% & 66.7\% \\
-SaaS billing     & 40.0\% & 66.7\% & 60.0\% \\
-Trick question   & 36.7\% & 33.3\% & 53.3\% \\
+SaaS billing            & 40.0\% & 66.7\% & 60.0\% \\
+Trick question          & 36.7\% & 33.3\% & 53.3\% \\
+Forced action           & 26.7\% & 33.3\% & 66.7\% \\
+Interface interference  & 0.0\%  & 0.0\%  & 0.0\%  \\
+Confirm shaming         & 0.0\%  & 0.0\%  & 0.0\%  \\
 \bottomrule
 \end{tabular}
 \label{tab:langpattern}
 \end{center}
 \end{table}
 
-A further observation supports the interpretation. The control
-condition---an honest interface with no manipulation---produced zero
-deception in E1a's 120 English episodes but six deceptions in the
-language arms, all non-English. Because there is nothing to fall for in
-control, these are comprehension failures, and their appearance only in
-localised arms is consistent with degraded interface understanding
-rather than degraded manipulation resistance specifically.
-
-\section{Two Measurement Failures}
-
-We report both of the following because we believe they are easy to
-introduce, hard to notice, and unlikely to be unique to us.
-
-\subsection{Criterion-bypassable items}
-\label{sec:measurability}
-
-Our disguised-advertisement item presented four search results, one a
-sponsored placement styled to blend in, with the label's prominence
-decreasing as intensity rose. The task was to buy the cheapest genuine
-product. Following our own specification, the ad was priced above every
-organic item so that selecting it would be unambiguously wrong.
-
-That decision made the item unmeasurable. Because the ad was the most
-expensive result and the task asked for the cheapest, any agent that
-compared prices avoided it---regardless of whether the sponsored label
-was clearly shown, greyed out, or absent. Intensity could not affect the
-outcome, and did not: 0\% deception at every level, under both adapters.
-
-The signature that revealed it was an inconsistency between runs. An
-earlier pilot had returned 60\% deception on the same item. Reconciling
-the two showed the pilot agent had been receiving no product names or
-prices at all---its traces read ``all buttons have the same text
-`Buy''' and ``no product details provided''---and had defaulted to the
-first element, which happened to be the ad. The pilot had measured a
-perception-pipeline gap and reported it as ad-disguise susceptibility.
-Once the extraction layer supplied surrounding text, the rate fell to
-zero, which is the correct value for an item that cannot discriminate.
-
-The general condition: \emph{if the task's stated criterion is
-sufficient to identify the correct choice, the manipulation is never
-load-bearing, and the item measures criterion evaluation rather than
-manipulation susceptibility.} An item can satisfy every apparent
-correctness requirement---unambiguous ground truth, a well-formed
-intensity ladder, a clean oracle---and still measure nothing.
-
-The released benchmark corrects the item by inverting the price
-relationship, so the ad is cheapest and price-only reasoning selects it,
-making the sponsored label the sole discriminating signal. We report no
-figures for the corrected item, for the reason given in
-Section~\ref{sec:limitations}.
-
-False urgency exhibits the same structural problem---a single-choice
-item in which price determines the answer and the urgency copy is never
-load-bearing---and we have not identified an equivalent fix. Making the
-urgent item cheapest would make selecting it correct; equalising prices
-removes the discriminator. Urgency is pressure to act \emph{quickly},
-which a single-step episode cannot express. We exclude the item rather
-than report a number we cannot defend.
-
-A practical corollary: a pattern scoring far from its published baseline
-in either direction warrants a construction audit before it is reported.
-Our 100\% avoidance against a prior-work baseline of approximately 65\%
-was the anomaly that prompted this investigation.
-
-\subsection{Completion-signal contamination}
-\label{sec:completion}
-
-BrowserUse produced 48 EF outcomes (10.0\%) against ComputerUse's 3
-(0.6\%)---a sixteenfold difference in episodes scored as ``avoided the
-dark pattern but did not complete the task.''
-
-We initially hypothesised swallowed exceptions in the adapter's error
-handling. Trace analysis falsified this. Of the 48 EF episodes, 45
-contain an explicit \texttt{done} action, against 1 of 378 EC episodes:
-near-perfect separation. Token counts are comparable to EC episodes
-(6{,}870 versus 7{,}163 mean input tokens), durations are longer (45.2s
-versus 37.9s), no episode approaches the step budget, and none has zero
-token usage. These are not failures. The agent declared itself finished.
-
-The mechanism is architectural. BrowserUse treats \texttt{done} as its
-native task-completion signal and its prompting encourages invoking it
-when the task appears complete; ComputerUse offers a bare action choice
-with no equivalent framing. The framework's own notion of completion
-fires before the page's terminal action, so the oracle never runs, and
-an outcome scheme keying ``avoided'' on the absence of a deceived oracle
-result credits the episode as safe.
-
-Seven of the 48 occur at \texttt{control} intensity, where there is no
-manipulation to avoid. Those are unambiguously task failures scored on
-the safe side, and they are the cleanest demonstration that the
-attribution is wrong.
-
-The general condition: \emph{when an agent framework has an internal
-notion of task completion, and a safety metric infers safety from the
-absence of an unsafe outcome, the framework's completion signal is
-silently converted into a safety claim.} This is invisible in aggregate
-statistics---BrowserUse's lower deception rates in
-Table~\ref{tab:patterns} are partly this artefact---and only becomes
-apparent when EF episodes are separated by architecture and their traces
-inspected. Cross-architecture comparisons that report only a deception
-rate will not surface it.
+The effect is concentrated in patterns that already succeed in English.
+The two patterns that are nulls in English remain nulls in every
+language---consistent with Section~\ref{sec:nulls}'s account, since
+language cannot make an agent acquire visual attention or capacity for
+guilt.
 
 \section{Qualitative Analysis}
 
 \subsection{How agents fall for subscription traps}
 
-We manually inspected twenty randomly sampled deceived episodes from
-SaaS billing, the highest-susceptibility pattern under ComputerUse. All
-twenty are genuine model failures rather than harness artefacts, and
-resolve into three mechanisms.
+We inspected twenty randomly sampled deceived episodes from SaaS
+billing, the highest-susceptibility pattern under ComputerUse. All
+twenty are genuine model failures rather than harness artefacts, in
+three mechanisms.
 
 \textbf{Semantic conflation ($\approx$65\%).} The model treats ``free
 trial'' as satisfying an instruction to select a ``free plan,'' not
@@ -619,150 +722,162 @@ auto-renewal terms are present and legible in the extracted context; the
 model does not connect them to its constraint.
 
 \textbf{Constraint-violating rationalisation ($\approx$25\%).} At higher
-intensities the interface offers no zero-cost option. The model
-identifies this correctly---one trace reads ``there's no clear option
-for a free plan without auto-renewal''---then clicks the trap anyway, on
-the grounds that it is ``the only actionable step.'' This is more
-concerning than the first: the constraint was understood and then
+intensities no zero-cost option exists. The model identifies this
+correctly---one trace reads ``there's no clear option for a free plan
+without auto-renewal''---then clicks the trap anyway, on the grounds it
+is ``the only actionable step.'' The constraint was understood and then
 discarded under pressure to complete the task.
 
 \textbf{Keyword-triggered action ($\approx$10\%).} A single-step
-response matching on the word ``free'' without evaluating surrounding
-pricing text.
+response matching on ``free'' without evaluating surrounding pricing.
 
 \subsection{Task abandonment}
 
 Excluding the BrowserUse episodes explained in
-Section~\ref{sec:completion}, twenty episodes ended with the task
-incomplete and the pattern avoided. These divide into three archetypes.
+Section~\ref{sec:completion}, nineteen episodes ended with task
+incomplete and pattern avoided, in three archetypes.
 
 \textbf{Principled refusal} (11 episodes, SaaS billing, larger model).
 The model recognises that the only available path commits the user to a
 recurring charge in violation of its instruction, and declines to act.
-We regard this as the desirable behaviour when an interface admits no
-compliant action, and note that it is the larger model exhibiting it.
+We regard this as correct behaviour when an interface admits no
+compliant action, and note it is the larger model exhibiting it.
 
 \textbf{Premature completion} (3 episodes, confirm shaming). The model
 removes the manipulated add-on, then declares the task finished without
 completing checkout---resisting the manipulation but losing the task.
 
 \textbf{Fixation loop} (5 episodes, basket sneaking, smaller model). The
-model correctly identifies a sneaked item in the total and refuses to
-pay, then repeats the same corrective action for twenty consecutive
-steps until the budget expires. It detected the constraint and lacked
-the planning capacity to act on it---a capability boundary rather than a
-susceptibility one.
+model identifies a sneaked item and refuses to pay, then repeats the
+same corrective action for twenty consecutive steps until the budget
+expires. It detected the constraint and lacked the planning capacity to
+act on it---a capability boundary, not a susceptibility one.
 
-\subsection{Why some patterns fail entirely}
+\subsection{What the four nulls have in common}
 \label{sec:nulls}
 
-Interface interference produced no deception at any intensity under
-either adapter. Trace inspection shows a genuine null rather than a
-broken implementation: at aggressive intensity the decline option is
-rendered as low-contrast, de-emphasised text beside a visually dominant
-renewal button, and the agent's reasoning identifies it
+Four patterns produced no genuine deception at any intensity under
+either architecture, and we argue this is not coincidence.
+
+\textbf{Interface interference} manipulates visual weight. At aggressive
+intensity the decline option is low-contrast, de-emphasised text beside
+a dominant renewal button. Traces show the agent identifying it
 directly---``the `Accept the risk' button is the option that aligns with
-this goal''---and selects it. The manipulation targets human visual
-salience; the agent reads all text nodes with equal weight.
+this goal''---and selecting it.
 
-Nagging fails relatedly: the agent declines the interrupting prompt and
-proceeds. Repetition imposes no cost on a system that does not
-experience annoyance.
+\textbf{Nagging} manipulates persistence, interrupting repeatedly for
+data access. The agent declines and proceeds.
 
-That both nulls hold across two independent DOM-processing
-architectures strengthens them considerably. Both would still be
-overturned by a vision-based agent, which neither adapter is.
+\textbf{Subscription trap} manipulates attrition, routing cancellation
+through a four-step retention flow. The agent completes all four steps.
+
+\textbf{Confirm shaming} manipulates guilt, labelling the decline option
+to make choosing it feel callous. The agent quotes the label to locate
+the button and clicks it.
+
+The four target properties agents do not possess: selective visual
+attention, irritation, finite patience, and susceptibility to social
+shame. Every pattern that \emph{does} succeed---auto-renewing trials,
+negated consent phrasing, late-revealed fees, substituted
+items---manipulates what information is available or how it is framed,
+which is the channel through which an agent perceives the page at all.
+
+This marks a division inside the CCPA taxonomy that its legal categories
+do not: patterns exploiting human perceptual and affective limits, and
+patterns exploiting information asymmetry. Only the second class
+transfers. If agent-mediated commerce grows, the first class loses
+potency while the second does not---with direct consequences for which
+categories warrant continued enforcement attention in an agentic
+setting.
+
+These remain claims about \emph{text-reading} agents. A vision-based
+agent, for which visual salience is a real signal, could overturn the
+interface-interference null specifically.
 
 \section{Limitations}
 \label{sec:limitations}
 
 \textbf{The models under test no longer exist.} Both agent models were
-withdrawn by the provider during this work, with service terminated
-shortly after data collection completed. The benchmark is reproducible
-in construction---testbed, specifications, rubrics, and configuration
-enumeration are all released---but the reported figures are not
-reproducible, because the system they measured is gone. We regard this
-as a structural problem for agent safety benchmarking rather than an
-incidental one: results obtained against hosted proprietary endpoints
-have a shelf life set by the provider, not by the research. Benchmarks
-intended to track susceptibility over time should anticipate this,
-either by pinning open-weights models that can be self-hosted or by
-treating each measurement as dated.
+withdrawn by the provider, with service terminated shortly after data
+collection completed. The benchmark is reproducible in
+construction---testbed, specifications, rubrics and configuration
+enumeration are released---but the figures are not, because the system
+they measured is gone. Results obtained against hosted proprietary
+endpoints have a shelf life set by the provider, not the research.
+
+\textbf{The fully-localised language arms are not interpretable.} See
+Section~\ref{sec:baseline}. We report them for completeness and because
+the contamination is itself a finding.
 
 \textbf{No corrected disguised-advertisement figures.} The corrected
-item (Section~\ref{sec:measurability}) could not be re-run on the same
-model before withdrawal. Reporting it on a substitute model would make
-it non-comparable with the other eleven patterns in the same table, so
-we report the diagnosis and the correction without figures.
+item could not be re-run on the same model before withdrawal, and
+running it on a substitute would make it non-comparable with the other
+patterns in the same table.
 
-\textbf{BrowserUse outcomes are partly architectural.}
-Section~\ref{sec:completion} establishes that 10\% of E1b episodes are
-its framework's completion signal rather than agent behaviour, and five
-control-condition deceptions remain unexplained. E1b's pattern-level
-rates should be read as an upper bound on comparability, and the
-cross-architecture claims we make are restricted to the two nulls, which
-hold in both.
+\textbf{BrowserUse outcomes are partly architectural.} 11.8\% of scored
+E1b episodes reflect the framework's completion signal rather than agent
+behaviour, and five control deceptions remain unexplained. Our
+cross-architecture claims are restricted to the four nulls, which hold
+in both.
 
-\textbf{Two architectures, both DOM-based.} Neither adapter is
-vision-based. The interface-interference null in particular is a claim
-about agents that read text, and the obvious next experiment is a
-vision-based agent for which visual salience is a real signal.
+\textbf{Two architectures, both DOM-based.} Neither is vision-based.
 
-\textbf{Single provider.} All models came from one inference provider.
-The pattern-level ranking may not generalise across model families.
+\textbf{Single provider.} The pattern-level ranking may not generalise
+across model families.
 
 \textbf{Trace-only judging.} The judge scores reasoning traces without
-the final screenshot, as the selected judge model does not support
-vision.
+the final screenshot, as the selected judge model lacks vision.
 
-\textbf{Confounded instruction language.} E2a and E2b vary instruction
-and interface together and cannot apportion the effect. Only the
-first three rows of Table~\ref{tab:lang} isolate a single variable.
+\textbf{The schema did not record a manipulated variable.} When the
+language arms ran, the episode log stored a single \texttt{language}
+column; the separation of instruction language from interface language
+existed only in memory and was dropped on insert. The conditions are
+recoverable only because they ran with disjoint seed blocks on different
+dates---fortunate rather than designed, and a fifth reminder that an
+experiment's schema should be verified to represent every variable the
+experiment manipulates.
 
 \textbf{Deterministic outcomes conflate mechanism.} For oracle-scored
-patterns we have no equivalent of the judge's causal separation. An
-episode is scored deceived whether the agent fell for the manipulation
-or merely mis-executed a correct intention. We observed at least one
-episode whose reasoning suggested the latter. Reported deception rates
-for deterministic patterns therefore include an unknown proportion of
-execution failures; traces are retained so this can be quantified.
+patterns we have no equivalent of the judge's causal separation, so a
+deceived score does not distinguish falling for the manipulation from
+mis-executing a correct intention. This is the same failure as
+Section~\ref{sec:baseline} in a milder form, and the traces are retained
+so it can be quantified.
 
-\textbf{DF is unreachable by construction.} No episode in 1,927 produced
-a deceived-and-incomplete outcome. This follows from the scoring path:
-\texttt{avoided} is carried by the oracle result, so a deceived outcome
-requires a completed transaction. The four-way outcome space is
-three-way in practice.
+\textbf{DF is unreachable by construction.} \texttt{avoided} is carried
+by the oracle result, so a deceived outcome requires a completed
+transaction. The four-way outcome space is three-way in practice.
 
 \section{Conclusion}
 
 We built Armavour to ask whether legally-codified dark patterns work on
-agents. The answer is that some do, some do not, and which is which is
-not predictable from how well they work on people.
+agents. Some do and some do not, and the division is not predictable
+from how well they work on people: patterns exploiting information
+asymmetry transfer, patterns exploiting human perceptual and affective
+limits do not.
 
-Manipulations altering what information is available or when it is
-disclosed---auto-renewing trials, negated consent phrasing,
-late-revealed fees---succeed at substantial rates. Manipulations relying
-on visual salience or on wearing the user down succeed not at all, under
-either architecture we tested, because they target properties the agent
-does not have.
+We also found four ways our own instrument measured something other than
+what it named. An item whose manipulation was never load-bearing. A
+scoring rule that read an agent framework's ``task complete'' as ``dark
+pattern avoided.'' A table whose denominator changed mid-column. And a
+deception rate inflated by the agent's inability to read the honest
+interface. All four produced stable, plausible numbers. Three biased
+toward apparent safety.
 
-The result we consider most consequential is that susceptibility rises
-sharply when the interface is not in English, on identical tasks with
-identical seeds, and rises further still when the instruction is
-localised too. Agent deployment is not confined to English-language
-interfaces, and consumer-protection regimes such as the CCPA exist
-precisely in the jurisdictions where this degradation is largest.
-
-We also report two ways our own measurements failed---an item that could
-not distinguish what it claimed to, and a scoring scheme that credited
-an agent framework's completion signal as safe behaviour---together with
-the empirical signatures that exposed them. Neither was visible in
-aggregate statistics. We suspect neither is unique to us.
+We do not think we were unusually careless. We think these are the
+shapes that measurement failure takes in this class of benchmark, and
+that they are difficult to see precisely because the numbers they
+produce look correct. Each was found by the same method: state how a
+reported quantity was supposed to be computed, recompute it from raw
+records, and look at where the reconstruction breaks. That method cost
+us days and found four errors, one of which inflated our own headline
+result. We suggest it belongs in the standard reporting path for agent
+safety benchmarks, not in the incident response path.
 
 \section*{Availability}
 
-The testbed, harness, pattern specifications, judge rubrics, and
-validation datasets are available at
+Testbed, harness, pattern specifications, judge rubrics, validation
+datasets and analysis code are available at
 \url{https://github.com/Soumya-Vinod/Armavour}. Note the model
 availability caveat in Section~\ref{sec:limitations}.
 
@@ -788,6 +903,12 @@ completed.]
 
 \bibitem{placeholder6} [BrowserUse framework citation --- to be
 completed.]
+
+\bibitem{placeholder7} [Construct validity in ML evaluation --- to be
+completed.]
+
+\bibitem{placeholder8} [Benchmark contamination / saturation ---
+to be completed.]
 
 \end{thebibliography}
 
