@@ -252,8 +252,10 @@ def _jsonable(value: Any) -> Any:
 
 def _elements_for_prompt(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
     prompt_elements: list[dict[str, Any]] = []
-    for element in elements:
+    for i, element in enumerate(elements):
         prompt_element = dict(element)
+        prompt_element.pop("id", None)
+        prompt_element["label"] = f"element-{i}"
         if not prompt_element.get("context_text"):
             prompt_element.pop("context_text", None)
         prompt_elements.append(prompt_element)

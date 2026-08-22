@@ -19,6 +19,12 @@ from auditor.field import (
 from auditor.storage import generate_timestamp_id
 from harness.extract import PageExtractionError, extract_elements
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,16 +93,31 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                 let total = null;
                 let items = [];
 
-                // Attempt to read window.__ARMAVOUR_CART__ or window.cart if available
+                // Attempt to read window.__ARMAVOUR_CART__ if available
                 if (window.__ARMAVOUR_CART__) {
-                    return window.__ARMAVOUR_CART__;
+                    const rawCart = window.__ARMAVOUR_CART__;
+                    if (rawCart && typeof rawCart === 'object') {
+                        let cartTotal = rawCart.total !== undefined ? rawCart.total : null;
+                        let cartItems = [];
+                        if (Array.isArray(rawCart.items)) {
+                            cartItems = rawCart.items.map(it => {
+                                if (typeof it === 'string') {
+                                    return { name: it, price: null };
+                                } else if (it && typeof it === 'object') {
+                                    return { name: it.name || String(it), price: typeof it.price === 'number' ? it.price : null };
+                                }
+                                return { name: String(it), price: null };
+                            });
+                        }
+                        return { total: cartTotal, items: cartItems };
+                    }
                 }
 
                 // Look for price elements with id/class containing total, subtotal, price
-                const totalElements = Array.from(document.querySelectorAll('#total, .total, .subtotal, [id*="total"], [class*="total"]'));
+                const totalElements = Array.from(document.querySelectorAll('#total, .total, .subtotal, [id*="total"], [class*="total"], [id*="subtotal"], [class*="subtotal"]'));
                 for (const el of totalElements) {
                     const text = (el.innerText || '').trim();
-                    const match = text.match(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)?(\\d+(?:,\\d+)*(?:\\.\\d+)?)/i);
+                    const match = text.match(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)(\\d+(?:,\\d+)*(?:\\.\\d+)?)/i);
                     if (match) {
                         const parsedVal = parseFloat(match[1].replace(/,/g, ''));
                         if (!isNaN(parsedVal) && parsedVal > 0) {
@@ -106,25 +127,121 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                     }
                 }
 
-                // Look for cart items
-                const itemElements = Array.from(document.querySelectorAll('.cart-item, .item, [data-item], [id*="cart-item"]'));
-                for (const itemEl of itemElements) {
-                    const text = (itemEl.innerText || '').trim();
-                    if (text) {
-                        items.push(text.split('\\n')[0]);
+                // Look for cart containers and item elements
+                const itemSelectors = [
+                    '[data-item]',
+                    '[data-product]',
+                    '[data-cart-item]',
+                    '[data-line-item]',
+                    '.cart-item',
+                    '.order-item',
+                    '.checkout-item',
+                    '.product-item',
+                    '.line',
+                    '[class*="cart-item"]',
+                    '[class*="order-item"]',
+                    '[class*="summary-line"]',
+                    '[class*="line"]',
+                    'li',
+                    'tr'
+                ];
+
+                const containers = Array.from(document.querySelectorAll('#cart, .cart, #order-summary, .order-summary, aside, [class*="cart"], [class*="summary"]'));
+                let candidates = [];
+
+                if (containers.length > 0) {
+                    for (const c of containers) {
+                        for (const sel of itemSelectors) {
+                            const found = Array.from(c.querySelectorAll(sel));
+                            candidates.push(...found);
+                        }
+                    }
+                } else {
+                    for (const sel of ['[data-item]', '[data-product]', '[data-cart-item]', '[data-line-item]', '.cart-item', '[id*="cart-item"]', '.line']) {
+                        candidates.push(...Array.from(document.querySelectorAll(sel)));
                     }
                 }
 
-                if (total !== null || items.length > 0) {
-                    return { total: total, items: items };
+                const seenNames = new Set();
+                for (const el of candidates) {
+                    if (el.id === 'total' || el.classList.contains('total') || el.classList.contains('subtotal')) {
+                        continue;
+                    }
+                    const text = (el.innerText || '').trim();
+                    if (!text) continue;
+
+                    if (/^(total|subtotal|order summary|your booking)/i.test(text)) {
+                        continue;
+                    }
+
+                    let itemPrice = null;
+                    const priceMatch = text.match(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)(\\d+(?:,\\d+)*(?:\\.\\d+)?)/i);
+                    if (priceMatch) {
+                        const pv = parseFloat(priceMatch[1].replace(/,/g, ''));
+                        if (!isNaN(pv)) {
+                            itemPrice = pv;
+                        }
+                    }
+
+                    let namePart = text.split('\\n')[0].trim();
+                    namePart = namePart.replace(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)\\d+(?:,\\d+)*(?:\\.\\d+)?/gi, '').trim();
+                    namePart = namePart.replace(/^[-:\\s]+|[-:\\s]+$/g, '').trim();
+
+                    if (!namePart) {
+                        namePart = text.split('\\n')[0].trim();
+                    }
+
+                    const nameKey = namePart.toLowerCase();
+                    const actionWords = ["do not", "pay more", "decline", "cancel", "remove", "refuse"];
+                    if (actionWords.some(w => nameKey.includes(w))) {
+                        continue;
+                    }
+                    if (nameKey && !seenNames.has(nameKey) && nameKey !== 'total' && nameKey !== 'subtotal') {
+                        seenNames.add(nameKey);
+                        items.push({ name: namePart, price: itemPrice });
+                    }
                 }
-                return null;
+
+                return { total: total, items: items };
             }"""
         )
-        return cart_info
+        if not cart_info or not isinstance(cart_info, dict):
+            logger.warning("cart_state_parse_empty: returned empty or non-dict result")
+            return {"total": None, "items": []}
+
+        total = cart_info.get("total")
+        if total is not None and isinstance(total, (int, float)):
+            total = int(total) if float(total).is_integer() else float(total)
+        else:
+            total = None
+
+        raw_items = cart_info.get("items") or []
+        formatted_items: list[dict[str, Any]] = []
+        action_words = ("do not", "pay more", "decline", "cancel", "remove", "refuse")
+        for it in raw_items:
+            if isinstance(it, dict):
+                name = str(it.get("name", "")).strip()
+                if any(w in name.lower() for w in action_words):
+                    continue
+                price = it.get("price")
+                if price is not None and isinstance(price, (int, float)):
+                    price = int(price) if float(price).is_integer() else float(price)
+                else:
+                    price = None
+                if name:
+                    formatted_items.append({"name": name, "price": price})
+            elif isinstance(it, str) and it.strip():
+                if any(w in it.lower() for w in action_words):
+                    continue
+                formatted_items.append({"name": it.strip(), "price": None})
+
+        if not formatted_items:
+            logger.warning("cart_state_parse_empty: no items parsed from DOM")
+
+        return {"total": total, "items": formatted_items}
     except Exception as exc:
-        logger.debug("cart_state_parse_failed: %s", exc)
-        return None
+        logger.warning("cart_state_parse_failed: %s", exc)
+        return {"total": None, "items": []}
 
 
 def run_audit(
@@ -140,17 +257,21 @@ def run_audit(
     robots_status = check_robots_txt(url, config.user_agent)
     log_audit_start(config.site_id, url, robots_status, config)
 
+    if not hasattr(adapter, "provider_latency_seconds"):
+        setattr(adapter, "provider_latency_seconds", 0.0)
+
     own_browser = False
     playwright_instance = None
     browser_instance = None
 
+    cm = None
     if page is None:
         own_browser = True
-        playwright_instance = sync_playwright().start()
+        cm = sync_playwright()
+        playwright_instance = cm.__enter__()
         browser_instance = playwright_instance.chromium.launch(headless=True)
         context = browser_instance.new_context(user_agent=config.user_agent)
         page = context.new_page()
-        page.goto(url, wait_until="domcontentloaded")
 
     trace = AuditTrace(
         site_id=config.site_id,
@@ -162,6 +283,14 @@ def run_audit(
     trace_history: list[dict[str, Any]] = []
 
     try:
+        try:
+            page.goto(url, wait_until="domcontentloaded")
+        except PlaywrightError as exc:
+            logger.warning("Page navigation failed for url=%s: %s", url, exc)
+            trace.completed_at = datetime.now(timezone.utc)
+            trace.stopped_reason = "error"
+            log_audit_end(config.site_id, trace, "error")
+            return trace
         for step_idx in range(config.max_steps):
             current_url = page.url or url
 
@@ -184,10 +313,55 @@ def run_audit(
                 stopped_reason = "error"
                 break
 
+            # Filter out pre-checked checkboxes with donation/charity/optional labels
+            filtered_elements = []
+            filtered_handle_map = {}
+            for el in elements:
+                is_checkbox = el.get("role") in ("checkbox", "input") or str(el.get("role", "")).lower() == "checkbox"
+                is_checked = el.get("checked") is True
+                combined_text = (
+                    str(el.get("text", "")) + " " +
+                    str(el.get("context_text", "")) + " " +
+                    str(el.get("id", ""))
+                ).lower()
+                is_donation_label = any(
+                    kw in combined_text
+                    for kw in ("donation", "charity", "optional", "contribution", "cause", "tip")
+                )
+                if is_checkbox and is_checked and is_donation_label:
+                    logger.debug("Filtering pre-checked donation element from step %d: %s", step_idx, el)
+                    continue
+
+                orig_index = el["index"]
+                new_index = len(filtered_elements)
+                el_copy = dict(el)
+                el_copy["index"] = new_index
+                filtered_elements.append(el_copy)
+                if orig_index in handle_map:
+                    filtered_handle_map[new_index] = handle_map[orig_index]
+
+            elements = filtered_elements
+            handle_map = filtered_handle_map
+
             # Obtain next action from adapter
-            action, _ = adapter._next_action(task, config, elements, trace_history)
+            try:
+                action, _ = adapter._next_action(task, config, elements, trace_history)
+            except Exception as exc:
+                logger.warning("Step %d adapter action request failed: %s", step_idx, exc)
+                stopped_reason = "error"
+                break
+
             reasoning = str(action.get("reasoning", ""))
             action_type = str(action.get("action", "")).lower()
+
+            # Guard: check if agent "fill" action value contains cancellation-related text
+            cancellation_kw = ("cancelling", "cancel", "not satisfied", "reason for leaving")
+            action_value = str(action.get("value", "")).lower() + " " + str(action.get("text", "")).lower()
+            if action_type in ("fill", "type") and any(kw in action_value for kw in cancellation_kw):
+                logger.warning("Guard triggered: Agent attempted to fill cancellation form at step %d. Replacing action with 'done'.", step_idx)
+                action = {"action": "done", "reasoning": "Skipping cancellation form fill"}
+                action_type = "done"
+                reasoning = "Skipping cancellation form fill"
 
             step_record = {
                 "step": step_idx,
@@ -205,8 +379,17 @@ def run_audit(
                 try:
                     adapter._execute(action, handle_map)
                 except (PlaywrightError, ValueError) as exc:
+                    if isinstance(exc, ValueError) and "Invalid action index" in str(exc):
+                        logger.info("Terminal step due to invalid action index at step %d: %s", step_idx, exc)
+                        stopped_reason = "agent_done"
+                        break
+                    if isinstance(exc, PlaywrightError) and _is_terminal_click_error(exc):
+                        logger.info("Terminal click failure at step %d: %s", step_idx, exc)
+                        stopped_reason = "agent_done"
+                        break
                     logger.warning("Step %d action execution error: %s", step_idx, exc)
                     stopped_reason = "error"
+                    break
 
             # AFTER step: capture snapshot, screenshot, cart state, and archive evidence
             dom_snapshot = page.content()
@@ -250,11 +433,26 @@ def run_audit(
         if own_browser:
             if browser_instance:
                 browser_instance.close()
-            if playwright_instance:
-                playwright_instance.stop()
+            if cm:
+                cm.__exit__(None, None, None)
 
     trace.completed_at = datetime.now(timezone.utc)
     trace.stopped_reason = stopped_reason
 
     log_audit_end(config.site_id, trace, stopped_reason)
     return trace
+
+
+def _is_terminal_click_error(exc: PlaywrightError) -> bool:
+    msg = str(exc).lower()
+    return any(
+        marker in msg
+        for marker in (
+            "timeout",
+            "element is not enabled",
+            "execution context was destroyed",
+            "target closed",
+            "page closed",
+            "frame was detached",
+        )
+    )

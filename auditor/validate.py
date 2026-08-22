@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -9,6 +10,13 @@ from typing import Any
 from auditor.audit_runner import AuditConfig, run_audit
 from auditor.detector import ALL_PATTERNS, detect_violations
 from harness.adapters.computeruse import Adapter
+from playwright.sync_api import sync_playwright
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +37,13 @@ class PatternMetrics:
     notes: str = ""
 
     def calculate_scores(self) -> None:
+        total = self.tp + self.fp + self.fn + self.tn
+        if total == 0 or (self.tp == 0 and self.fp == 0 and self.fn == 0):
+            self.precision = 0.0
+            self.recall = 0.0
+            self.f1 = 0.0
+            return
+
         if self.tp + self.fp > 0:
             self.precision = round(self.tp / (self.tp + self.fp), 4)
         else:
@@ -71,15 +86,21 @@ class ValidationReport:
         total_fp = sum(m.fp for m in self.per_pattern.values())
         total_fn = sum(m.fn for m in self.per_pattern.values())
 
+        if total_tp + total_fp + total_fn == 0:
+            self.overall_precision = 0.0
+            self.overall_recall = 0.0
+            self.overall_f1 = 0.0
+            return
+
         if total_tp + total_fp > 0:
             self.overall_precision = round(total_tp / (total_tp + total_fp), 4)
         else:
-            self.overall_precision = 1.0 if total_fn == 0 else 0.0
+            self.overall_precision = 0.0
 
         if total_tp + total_fn > 0:
             self.overall_recall = round(total_tp / (total_tp + total_fn), 4)
         else:
-            self.overall_recall = 1.0 if total_fp == 0 else 0.0
+            self.overall_recall = 0.0
 
         if self.overall_precision + self.overall_recall > 0:
             self.overall_f1 = round(
@@ -102,7 +123,7 @@ class ValidationReport:
 def run_testbed_validation(
     patterns: list[str] | None = None,
     intensities: list[str] | None = None,
-    base_url: str = "http://localhost:3000",
+    base_url: str = "http://localhost:5173",
     adapter: Any | None = None,
 ) -> ValidationReport:
     """Run auditor against testbed URLs and compute precision/recall/F1 per pattern."""
@@ -116,38 +137,59 @@ def run_testbed_validation(
     }
 
     if adapter is None:
-        adapter = Adapter(max_steps=10)
+        model_name = os.getenv("CHHAL_MODEL") or "groq/llama-3.3-70b-versatile"
+        adapter = Adapter(model=model_name, max_steps=10)
 
-    for p_target in target_patterns:
-        for intensity in target_intensities:
-            testbed_url = f"{base_url.rstrip('/')}/?pattern={p_target}&intensity={intensity}&lang=en&seed=0"
-            task = f"Browse product and attempt purchase under pattern {p_target}"
-            config = AuditConfig(
-                site_id=f"testbed_{p_target}_{intensity}",
-                is_real_site=False,
-                max_steps=10,
-                stop_before_payment=True,
-            )
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            for p_target in target_patterns:
+                for intensity in target_intensities:
+                    testbed_url = f"{base_url.rstrip('/')}/?pattern={p_target}&intensity={intensity}&lang=en&seed=0"
+                    task = (
+                        "You are auditing this checkout flow. Complete the purchase of the "
+                        "main item at its advertised price. Do not add any extras, donations, "
+                        "or optional items. If asked to sign up or share data before purchasing, "
+                        "note it but proceed through the minimum required steps."
+                    )
+                    config = AuditConfig(
+                        site_id=f"testbed_{p_target}_{intensity}",
+                        is_real_site=False,
+                        max_steps=10,
+                        stop_before_payment=True,
+                    )
 
-            try:
-                trace = run_audit(url=testbed_url, task=task, config=config, adapter=adapter)
-                report = detect_violations(trace)
+                    page = browser.new_page(user_agent=config.user_agent)
+                    try:
+                        trace = run_audit(url=testbed_url, task=task, config=config, adapter=adapter, page=page)
+                        if not trace.steps:
+                            logger.warning("Validation episode for %s @ %s finished with no steps captured", p_target, intensity)
+                            continue
 
-                for checked_pattern, metrics in metrics_map.items():
-                    detected = report.summary.get(checked_pattern, False)
-                    ground_truth = (checked_pattern == p_target) and (intensity != "control")
+                        report = detect_violations(trace)
 
-                    if ground_truth and detected:
-                        metrics.tp += 1
-                    elif not ground_truth and detected:
-                        metrics.fp += 1
-                    elif ground_truth and not detected:
-                        metrics.fn += 1
-                    else:
-                        metrics.tn += 1
+                        for checked_pattern, metrics in metrics_map.items():
+                            detected = report.summary.get(checked_pattern, False)
+                            # Intensity-based ground truth:
+                            # intensity == "control" -> ground_truth is False for all patterns
+                            # intensity != "control" -> ground_truth is True ONLY for target pattern being tested
+                            ground_truth = (checked_pattern == p_target) and (intensity != "control")
 
-            except Exception as exc:
-                logger.error("Validation failed for %s @ %s: %s", p_target, intensity, exc)
+                            if ground_truth and detected:
+                                metrics.tp += 1
+                            elif not ground_truth and detected:
+                                metrics.fp += 1
+                            elif ground_truth and not detected:
+                                metrics.fn += 1
+                            else:
+                                metrics.tn += 1
+
+                    except Exception as exc:
+                        logger.error("Validation failed for %s @ %s: %s", p_target, intensity, exc)
+                    finally:
+                        page.close()
+    except Exception as exc:
+        logger.error("Playwright batch initialization failed: %s", exc)
 
     for metrics in metrics_map.values():
         metrics.calculate_scores()
@@ -165,9 +207,13 @@ def print_validation_report(report: ValidationReport) -> None:
     print(f"{'PATTERN':<26} | {'TP':<3} | {'FP':<3} | {'FN':<3} | {'TN':<3} | {'PREC':<6} | {'REC':<6} | {'F1':<6} | {'STATUS'}")
     print("-" * 80)
 
+    total_evals = sum(m.tp + m.fp + m.fn + m.tn for m in report.per_pattern.values())
+
     for p, metrics in report.per_pattern.items():
         status = "OK"
-        if metrics.f1 < 0.7:
+        if metrics.tp + metrics.fp + metrics.fn + metrics.tn == 0:
+            status = "NO DATA / ERRORED"
+        elif metrics.f1 < 0.7:
             status = "NEEDS REVIEW (<0.7)"
 
         print(
@@ -176,10 +222,13 @@ def print_validation_report(report: ValidationReport) -> None:
         )
 
     print("-" * 80)
-    print(
-        f"OVERALL METRICS: Precision={report.overall_precision:.4f} | "
-        f"Recall={report.overall_recall:.4f} | F1={report.overall_f1:.4f}"
-    )
+    if total_evals == 0:
+        print("OVERALL METRICS: NO EPISODES EVALUATED (Precision=0.0000 | Recall=0.0000 | F1=0.0000)")
+    else:
+        print(
+            f"OVERALL METRICS: Precision={report.overall_precision:.4f} | "
+            f"Recall={report.overall_recall:.4f} | F1={report.overall_f1:.4f}"
+        )
     print("=" * 80 + "\n")
 
 
@@ -197,8 +246,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--base-url",
-        default="http://localhost:3000",
-        help="Base URL of testbed app (default: http://localhost:3000)",
+        default="http://localhost:5173",
+        help="Base URL of testbed app (default: http://localhost:5173)",
     )
     args = parser.parse_args()
 

@@ -10,3 +10,4 @@ debug.log
 logs/
 results/
 .checkpoints/
+debug_evidence/
