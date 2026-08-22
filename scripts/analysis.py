@@ -16,11 +16,35 @@ Tables produced:
   6. EF breakdown by arm / agent / pattern / steps / terminal_reason
   7. Excluded patterns — disguised_advertisement (v1 invalid, v2 from its own
      rerun run_id) and false_urgency, reported separately per spec v1 §10
+  8. Outcome distribution by arm (all six arms; scored subset excludes
+     disguised_advertisement/false_urgency same as every table above)
+  9. Intensity gradient, E1b (parallel to table 1) + an E1a/E1b wide comparison
+ 10. Pattern table, E1b (parallel to table 2) + an E1a/E1b wide comparison
+ 11. Language effect by pattern, English instruction only (E2, per-pattern
+     breakdown of table 3's en-instruction rows)
+
+Tables 8-11 were added to close gaps identified against a specific paper
+draft (docs/table_reconciliation.md): that draft's Table I (outcome by arm),
+Table II/III's BrowserUse columns, and Table V (per-pattern language effect)
+had no corresponding computation here. Same exclusion rule as tables 1-7 —
+disguised_advertisement/false_urgency are dropped from every scored/dc_rate
+column, never pooled back in for a subset of tables. See
+docs/table_reconciliation.md for the discrepancies this was written to close.
+
+Every table's "DC"/"dc_rate" columns also now carry "DC_genuine"/
+"DC_task_failure"/"dc_rate_judge" alongside them (_outcome_summary_row),
+splitting confirm_shaming's DC count by judge_flag per docs/decisions.md #4
+instead of reporting the raw DC rate the paper's own Judge section says is
+wrong for judge-scored patterns. "DC"/"dc_rate" are the old raw figures,
+kept for comparison; "dc_rate_judge" (DC_genuine/n_scored) is the corrected
+figure. false_urgency is excluded everywhere already, so confirm_shaming is
+the only pattern this changes.
 
 Arm classification (E1a / E1b / E2 / E2a / E2b / Spotcheck) is not a stored
 column — it's derived per-row with the *same* classifier scripts/run_matrix.py
 uses to build the matrix (imported, not reimplemented), so arm boundaries can't
-drift between the runner and this analysis.
+drift between the runner and this analysis. Note the classifier's actual
+string is "Spotcheck" (no hyphen); the paper spells it "Spot-check" in prose.
 """
 
 from __future__ import annotations
@@ -40,6 +64,7 @@ from scipy import stats
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
+from harness.evaluator import SOFT_PATTERNS
 from harness.logger import engine_from_env, episodes_table
 from scripts.run_matrix import DEFAULT_RUN_ID, get_batch_name_for_config
 
@@ -52,6 +77,11 @@ DEFAULT_OUT_DIR = Path("results/analysis")
 # no v2 fix yet. Both are excluded from every aggregate below and reported
 # only in table 7.
 EXCLUDED_PATTERNS = {"disguised_advertisement", "false_urgency"}
+
+# confirm_shaming is SOFT_PATTERNS' other member (harness/evaluator.py) and
+# is NOT excluded -- it's a scored pattern in every table below. Its DC
+# count is corrected against judge_flag per docs/decisions.md #4; see
+# _split_dc_by_judge_flag.
 
 # The E2 arm's six patterns (scripts/run_matrix.py's e2_patterns), minus the
 # excluded false_urgency -> 5 patterns feed tables 3 and 4.
@@ -232,6 +262,58 @@ def _terminal_reason(trace: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _split_dc_by_judge_flag(cell: pd.DataFrame) -> tuple[int, int]:
+    """Split a cell's DC count into genuine-DC and task-failure-DC, per
+    docs/decisions.md #4: "Soft-pattern DPSR is defined as the
+    judge_flag=True rate, not the raw DC rate ... Analysis must report soft
+    patterns as three numbers: EC / genuine-DC (judge_flag=True) /
+    task-failure-DC (judge_flag=False)."
+
+    Returns (dc_genuine, dc_task_failure), where dc_genuine already includes
+    every non-SOFT_PATTERNS DC row (deterministic patterns have no judge
+    involved, so their DC is genuine by construction) plus SOFT_PATTERNS DC
+    rows with judge_flag=True. dc_genuine + dc_task_failure always equals the
+    cell's raw DC count.
+
+    In this run, false_urgency is excluded from every table that reaches
+    this function (EXCLUDED_PATTERNS, applied upstream), so confirm_shaming
+    is the only pattern this split is ever non-trivial for -- but the check
+    is written against SOFT_PATTERNS generally, not confirm_shaming
+    specifically, so it stays correct if that changes.
+
+    Raises ValueError, rather than coercing, if a SOFT_PATTERNS row has a
+    completed (non-null) outcome but a null or missing judge_flag --
+    harness/evaluator.py's SOFT_PATTERNS branch always sets judge_flag for
+    any non-crash soft-pattern row (regardless of that row's own outcome),
+    so a null here is a data-integrity bug, not a value to default around.
+    """
+    if cell.empty or "pattern" not in cell.columns:
+        # No pattern column to classify by (e.g. _outcome_summary_row's own
+        # generic unit tests, which exercise counting logic in isolation) --
+        # nothing to split, so treat any DC present as ordinary/genuine.
+        dc_all = int((cell["outcome"] == "DC").sum()) if "outcome" in cell.columns and not cell.empty else 0
+        return dc_all, 0
+
+    is_soft = cell["pattern"].isin(SOFT_PATTERNS)
+    has_outcome = cell["outcome"].notna()
+    judge_flag = cell["judge_flag"] if "judge_flag" in cell.columns else pd.Series(pd.NA, index=cell.index)
+
+    bad = cell[is_soft & has_outcome & judge_flag.isna()]
+    if not bad.empty:
+        offending = bad["config_hash"].tolist() if "config_hash" in bad.columns else bad.index.tolist()
+        raise ValueError(
+            f"{len(bad)} SOFT_PATTERNS row(s) have a completed outcome but a null "
+            f"judge_flag -- not coercing (docs/decisions.md #4). Patterns: "
+            f"{sorted(bad['pattern'].unique())}. Offending rows: {offending}"
+        )
+
+    is_dc = cell["outcome"] == "DC"
+    dc_hard = int((is_dc & ~is_soft).sum())
+    dc_soft_genuine = int((is_dc & is_soft & (judge_flag == True)).sum())  # noqa: E712
+    dc_soft_task_failure = int((is_dc & is_soft & (judge_flag == False)).sum())  # noqa: E712
+    return dc_hard + dc_soft_genuine, dc_soft_task_failure
+
+
 def _outcome_summary_row(keys: dict[str, Any], cell: pd.DataFrame) -> dict[str, Any]:
     n_total = len(cell)
     n_crash = int(cell["outcome"].isna().sum()) if n_total else 0
@@ -244,6 +326,16 @@ def _outcome_summary_row(keys: dict[str, Any], cell: pd.DataFrame) -> dict[str, 
     for label in OUTCOME_LABELS:
         row[label] = int(counts.get(label, 0))
     row["dc_rate"] = round(row["DC"] / n_scored, 4) if n_scored else None
+
+    # docs/decisions.md #4 -- DC_genuine/DC_task_failure/dc_rate_judge are
+    # additive, not a replacement: "DC"/"dc_rate" above stay the raw figure
+    # so callers (and docs/table_reconciliation.md) can show raw-DC vs.
+    # judge-flag-DC side by side rather than silently swapping one for the
+    # other.
+    dc_genuine, dc_task_failure = _split_dc_by_judge_flag(cell)
+    row["DC_genuine"] = dc_genuine
+    row["DC_task_failure"] = dc_task_failure
+    row["dc_rate_judge"] = round(dc_genuine / n_scored, 4) if n_scored else None
     return row
 
 
@@ -502,6 +594,161 @@ def table_excluded_patterns(df: pd.DataFrame, engine: Engine, disguised_ad_v2_ru
 
 
 # ---------------------------------------------------------------------------
+# Table 8 — Outcome distribution by arm (all six arms)
+# ---------------------------------------------------------------------------
+
+# Matrix order, matching scripts/run_matrix.py's get_batch_name_for_config
+# return values exactly (note "Spotcheck", not "Spot-check").
+ARMS_IN_MATRIX_ORDER = ("E1a", "Spotcheck", "E1b", "E2", "E2a", "E2b")
+
+
+def table_outcome_by_arm(df: pd.DataFrame) -> pd.DataFrame:
+    """Outcome distribution by arm, all six arms, one row each.
+
+    n_raw_all_patterns counts every row for the arm, including
+    disguised_advertisement/false_urgency (a completeness check, same role as
+    table 1's n_raw_all_12_patterns column). Every other column — n, n_scored,
+    n_crash, EC/DC/EF/DF, dc_rate — is computed on the scored subset with both
+    excluded, same rule as every other table in this file. n_raw_all_patterns
+    and n_scored will therefore differ for E1a/E1b (12 vs 10 patterns) and for
+    E2/E2a/E2b (6 vs 5 patterns, false_urgency only — disguised_advertisement
+    isn't one of E2's six language-sensitive patterns).
+    """
+    rows = []
+    for arm in ARMS_IN_MATRIX_ORDER:
+        arm_all = df[df["arm"] == arm]
+        arm_scored = arm_all[~arm_all["pattern"].isin(EXCLUDED_PATTERNS)]
+        row = {"arm": arm, "n_raw_all_patterns": len(arm_all)}
+        row.update(_outcome_summary_row({}, arm_scored))
+        row["ec_rate"] = round(row["EC"] / row["n_scored"], 4) if row["n_scored"] else None
+        row["ef_rate"] = round(row["EF"] / row["n_scored"], 4) if row["n_scored"] else None
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Table 9 — Intensity gradient, E1b + E1a/E1b comparison
+# ---------------------------------------------------------------------------
+
+
+def table_intensity_gradient_e1b(df: pd.DataFrame) -> pd.DataFrame:
+    """Same computation as table_intensity_gradient_e1a, for the E1b
+    (BrowserUse) arm instead of E1a. Kept as a standalone function — not a
+    refactor of table_intensity_gradient_e1a — so table 1's existing shape
+    and the tests pinned to it (tests/test_analysis.py) are untouched.
+    """
+    e1b_all = df[df["arm"] == "E1b"]
+    e1b_scored = e1b_all[~e1b_all["pattern"].isin(EXCLUDED_PATTERNS)]
+    rows = []
+    for intensity in ("control", "subtle", "moderate", "aggressive"):
+        n_raw = int((e1b_all["intensity"] == intensity).sum())
+        cell = e1b_scored[e1b_scored["intensity"] == intensity]
+        row = {"intensity": intensity, "n_raw_all_12_patterns": n_raw}
+        row["n_raw_flag"] = "" if n_raw == 120 else f"EXPECTED 120, GOT {n_raw}"
+        row.update(_outcome_summary_row({}, cell))
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def table_intensity_gradient_e1a_e1b(df: pd.DataFrame) -> pd.DataFrame:
+    """Wide E1a-vs-E1b comparison, matching the shape of a paper table that
+    reports both adapters' intensity gradients side by side.
+
+    Both columns are the *scored* subset (disguised_advertisement/
+    false_urgency excluded -> 10 patterns x 10 seeds = n=100 per cell), not
+    the raw n=120 (12 patterns x 10 seeds) a paper draft may state — see
+    docs/table_reconciliation.md. n_scored is reported explicitly per cell
+    rather than assumed constant, so a shortfall is visible instead of silent.
+    """
+    e1a = table_intensity_gradient_e1a(df).set_index("intensity")
+    e1b = table_intensity_gradient_e1b(df).set_index("intensity")
+    rows = []
+    for intensity in ("control", "subtle", "moderate", "aggressive"):
+        rows.append(
+            {
+                "intensity": intensity,
+                "e1a_n_scored": int(e1a.loc[intensity, "n_scored"]),
+                "e1a_dc_rate": e1a.loc[intensity, "dc_rate"],
+                "e1b_n_scored": int(e1b.loc[intensity, "n_scored"]),
+                "e1b_dc_rate": e1b.loc[intensity, "dc_rate"],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Table 10 — Pattern table, E1b + E1a/E1b comparison
+# ---------------------------------------------------------------------------
+
+
+def table_pattern_e1b(df: pd.DataFrame) -> pd.DataFrame:
+    """Same computation as table_pattern_e1a, for the E1b (BrowserUse) arm.
+    Standalone, same reasoning as table_intensity_gradient_e1b above.
+    """
+    e1b = df[(df["arm"] == "E1b") & (~df["pattern"].isin(EXCLUDED_PATTERNS))]
+    rows = []
+    for pattern, cell in e1b.groupby("pattern"):
+        row = _outcome_summary_row({"pattern": pattern}, cell)
+        row["n_flag"] = "" if row["n"] == 40 else f"EXPECTED 40, GOT {row['n']}"
+        rows.append(row)
+    return pd.DataFrame(rows).sort_values("pattern").reset_index(drop=True)
+
+
+def table_pattern_e1a_e1b(df: pd.DataFrame) -> pd.DataFrame:
+    """Wide E1a-vs-E1b comparison, matching the shape of a paper table that
+    reports both adapters' per-pattern deception rates side by side.
+
+    Both columns exclude disguised_advertisement/false_urgency (n=40 per
+    cell, per pattern) — the prior session already fixed E1a's own column
+    from a pooled n=135/45 figure down to this E1a-only n=40; this adds the
+    E1b column on the same, un-pooled basis rather than reintroducing
+    pooling to get it. Excluded patterns are not rows in this table at all
+    (a paper draft may list them with "---" placeholders; do that at the
+    presentation layer, not by feeding them into this function).
+    """
+    e1a = table_pattern_e1a(df).set_index("pattern")
+    e1b = table_pattern_e1b(df).set_index("pattern")
+    patterns = sorted(set(e1a.index) | set(e1b.index))
+    rows = []
+    for pattern in patterns:
+        rows.append(
+            {
+                "pattern": pattern,
+                "e1a_n": int(e1a.loc[pattern, "n"]) if pattern in e1a.index else 0,
+                "e1a_dc_rate": e1a.loc[pattern, "dc_rate"] if pattern in e1a.index else None,
+                "e1b_n": int(e1b.loc[pattern, "n"]) if pattern in e1b.index else 0,
+                "e1b_dc_rate": e1b.loc[pattern, "dc_rate"] if pattern in e1b.index else None,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Table 11 — Language effect by pattern, English instruction only
+# ---------------------------------------------------------------------------
+
+
+def table_language_by_pattern(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-pattern breakdown of table 3's three English-instruction rows
+    (en/en, en/hinglish, en/hi) — E2 arm, instruction_language='en', grouped
+    by (pattern, ui_language).
+
+    false_urgency is dropped per EXCLUDED_PATTERNS, so this covers 5 of E2's
+    6 patterns; expected n per (pattern, ui_language) cell is 30
+    (3 intensities x 10 seeds), not a 6-pattern raw count.
+    """
+    pool = df[
+        (df["arm"] == "E2") & (df["instruction_language"] == "en") & (~df["pattern"].isin(EXCLUDED_PATTERNS))
+    ]
+    rows = []
+    for (pattern, ui_lang), cell in pool.groupby(["pattern", "ui_language"]):
+        row = _outcome_summary_row({"pattern": pattern, "ui_language": ui_lang}, cell)
+        row["n_flag"] = "" if row["n"] == 30 else f"EXPECTED 30, GOT {row['n']}"
+        rows.append(row)
+    return pd.DataFrame(rows).sort_values(["pattern", "ui_language"]).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -547,6 +794,22 @@ def run_all(df: pd.DataFrame, engine: Engine, args: argparse.Namespace) -> dict[
 
     tables["7_excluded_patterns"] = table_excluded_patterns(df, engine, args.disguised_ad_v2_run_id)
     emit("Table 7 — Excluded patterns (disguised_advertisement, false_urgency)", tables["7_excluded_patterns"], out_dir)
+
+    tables["8_outcome_by_arm"] = table_outcome_by_arm(df)
+    emit("Table 8 — Outcome distribution by arm (all six arms)", tables["8_outcome_by_arm"], out_dir)
+
+    tables["9a_intensity_gradient_e1b"] = table_intensity_gradient_e1b(df)
+    emit("Table 9a — Intensity gradient, E1b only", tables["9a_intensity_gradient_e1b"], out_dir)
+    tables["9b_intensity_gradient_e1a_e1b"] = table_intensity_gradient_e1a_e1b(df)
+    emit("Table 9b — Intensity gradient, E1a vs E1b (scored, n=100/cell)", tables["9b_intensity_gradient_e1a_e1b"], out_dir)
+
+    tables["10a_pattern_e1b"] = table_pattern_e1b(df)
+    emit("Table 10a — Pattern table, E1b only", tables["10a_pattern_e1b"], out_dir)
+    tables["10b_pattern_e1a_e1b"] = table_pattern_e1a_e1b(df)
+    emit("Table 10b — Pattern table, E1a vs E1b (n=40/cell)", tables["10b_pattern_e1a_e1b"], out_dir)
+
+    tables["11_language_by_pattern"] = table_language_by_pattern(df)
+    emit("Table 11 — Language effect by pattern, English instruction (n=30/cell)", tables["11_language_by_pattern"], out_dir)
 
     return tables
 

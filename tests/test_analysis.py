@@ -7,19 +7,28 @@ import pandas as pd
 import sqlalchemy as sa
 from sqlalchemy import create_engine
 
+import pytest
+
 from harness.logger import log_episode
 from scripts.analysis import (
     EXCLUDED_PATTERNS,
     _deceived,
     _outcome_summary_row,
+    _split_dc_by_judge_flag,
     _terminal_reason,
     load_episodes,
     table_control_deceptions,
     table_ef_breakdown,
     table_excluded_patterns,
     table_intensity_gradient_e1a,
+    table_intensity_gradient_e1a_e1b,
+    table_intensity_gradient_e1b,
+    table_language_by_pattern,
     table_language_conditions,
+    table_outcome_by_arm,
     table_pattern_e1a,
+    table_pattern_e1a_e1b,
+    table_pattern_e1b,
     table_paired_language_mcnemar,
 )
 
@@ -60,6 +69,8 @@ def test_terminal_reason_parses_json_string_trace() -> None:
 
 
 def test_outcome_summary_row_counts_and_dc_rate() -> None:
+    # No "pattern" column at all -- _split_dc_by_judge_flag has nothing to
+    # classify by, so DC is treated as ordinary/genuine (see its docstring).
     cell = pd.DataFrame({"outcome": ["EC", "EC", "DC", "DF", "EF", None]})
     row = _outcome_summary_row({"label": "x"}, cell)
     assert row == {
@@ -72,6 +83,9 @@ def test_outcome_summary_row_counts_and_dc_rate() -> None:
         "EF": 1,
         "DF": 1,
         "dc_rate": round(1 / 5, 4),
+        "DC_genuine": 1,
+        "DC_task_failure": 0,
+        "dc_rate_judge": round(1 / 5, 4),
     }
 
 
@@ -79,6 +93,99 @@ def test_outcome_summary_row_handles_empty_cell() -> None:
     row = _outcome_summary_row({}, pd.DataFrame({"outcome": pd.Series(dtype="object")}))
     assert row["n"] == 0
     assert row["dc_rate"] is None
+
+
+# ---------------------------------------------------------------------------
+# _split_dc_by_judge_flag — docs/decisions.md #4, genuine-DC vs task-failure-DC
+# ---------------------------------------------------------------------------
+
+
+def test_split_dc_by_judge_flag_hard_pattern_dc_is_always_genuine() -> None:
+    # basket_sneaking isn't SOFT_PATTERNS -- no judge involved, its DC is
+    # genuine by construction even with no judge_flag column at all.
+    cell = pd.DataFrame(
+        [
+            {"pattern": "basket_sneaking", "outcome": "DC"},
+            {"pattern": "basket_sneaking", "outcome": "EC"},
+        ]
+    )
+    assert _split_dc_by_judge_flag(cell) == (1, 0)
+
+
+def test_split_dc_by_judge_flag_splits_confirm_shaming_by_flag() -> None:
+    cell = pd.DataFrame(
+        [
+            {"pattern": "confirm_shaming", "outcome": "DC", "judge_flag": True},  # genuine
+            {"pattern": "confirm_shaming", "outcome": "DC", "judge_flag": False},  # task-failure
+            {"pattern": "confirm_shaming", "outcome": "DC", "judge_flag": True},  # genuine
+            {"pattern": "confirm_shaming", "outcome": "EC", "judge_flag": False},  # not DC at all
+        ]
+    )
+    dc_genuine, dc_task_failure = _split_dc_by_judge_flag(cell)
+    assert dc_genuine == 2
+    assert dc_task_failure == 1
+
+
+def test_split_dc_by_judge_flag_mixes_hard_and_soft_patterns_in_one_cell() -> None:
+    # A pooled cell (e.g. an intensity-gradient or arm-level row) spans many
+    # patterns -- hard-pattern DC and soft-pattern genuine-DC both count
+    # toward dc_genuine; only soft-pattern judge_flag=False counts toward
+    # dc_task_failure.
+    cell = pd.DataFrame(
+        [
+            {"pattern": "basket_sneaking", "outcome": "DC"},
+            {"pattern": "confirm_shaming", "outcome": "DC", "judge_flag": True},
+            {"pattern": "confirm_shaming", "outcome": "DC", "judge_flag": False},
+        ]
+    )
+    assert _split_dc_by_judge_flag(cell) == (2, 1)
+
+
+def test_split_dc_by_judge_flag_raises_on_null_flag_for_completed_soft_pattern_row() -> None:
+    cell = pd.DataFrame(
+        [
+            {"pattern": "confirm_shaming", "outcome": "DC", "judge_flag": None, "config_hash": "h1"},
+        ]
+    )
+    with pytest.raises(ValueError, match="null judge_flag"):
+        _split_dc_by_judge_flag(cell)
+
+
+def test_split_dc_by_judge_flag_raises_when_judge_flag_column_missing_entirely() -> None:
+    # No judge_flag column at all, but a completed-outcome soft-pattern row
+    # is present -- same bug class as an explicit null, must raise too.
+    cell = pd.DataFrame([{"pattern": "confirm_shaming", "outcome": "EC"}])
+    with pytest.raises(ValueError, match="null judge_flag"):
+        _split_dc_by_judge_flag(cell)
+
+
+def test_split_dc_by_judge_flag_does_not_raise_on_crash_rows() -> None:
+    # A crash row (outcome=None) never went through the judge branch --
+    # null judge_flag there is expected, not a bug.
+    cell = pd.DataFrame(
+        [
+            {"pattern": "confirm_shaming", "outcome": None, "judge_flag": None},
+            {"pattern": "confirm_shaming", "outcome": "DC", "judge_flag": True},
+        ]
+    )
+    assert _split_dc_by_judge_flag(cell) == (1, 0)
+
+
+def test_outcome_summary_row_reports_raw_and_judge_dc_side_by_side() -> None:
+    cell = pd.DataFrame(
+        [
+            {"pattern": "confirm_shaming", "outcome": "DC", "judge_flag": True},
+            {"pattern": "confirm_shaming", "outcome": "DC", "judge_flag": False},
+            {"pattern": "confirm_shaming", "outcome": "EC", "judge_flag": False},
+            {"pattern": "confirm_shaming", "outcome": "EC", "judge_flag": False},
+        ]
+    )
+    row = _outcome_summary_row({}, cell)
+    assert row["DC"] == 2  # raw, unchanged
+    assert row["dc_rate"] == round(2 / 4, 4)  # raw, unchanged
+    assert row["DC_genuine"] == 1
+    assert row["DC_task_failure"] == 1
+    assert row["dc_rate_judge"] == round(1 / 4, 4)  # corrected, per decisions.md #4
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +227,10 @@ def test_table_pattern_e1a_flags_wrong_n_and_drops_excluded_patterns() -> None:
         [
             {"arm": "E1a", "pattern": "basket_sneaking", "outcome": "EC"},
             {"arm": "E1a", "pattern": "basket_sneaking", "outcome": "DC"},
-            {"arm": "E1a", "pattern": "confirm_shaming", "outcome": "EC"},
+            # confirm_shaming is SOFT_PATTERNS -- a completed outcome needs a
+            # non-null judge_flag (harness/evaluator.py always sets one for
+            # non-crash soft-pattern rows); EC here means judge_flag=False.
+            {"arm": "E1a", "pattern": "confirm_shaming", "outcome": "EC", "judge_flag": False},
             {"arm": "E1a", "pattern": "false_urgency", "outcome": "DC"},
             {"arm": "E1b", "pattern": "basket_sneaking", "outcome": "DC"},  # different arm, ignored
         ]
@@ -147,6 +257,7 @@ def test_table_language_conditions_reports_five_conditions_separately() -> None:
                 "instruction_language": "en",
                 "ui_language": "en",
                 "outcome": "EC",
+                "judge_flag": False,
             },
             {
                 "arm": "E2",
@@ -154,6 +265,7 @@ def test_table_language_conditions_reports_five_conditions_separately() -> None:
                 "instruction_language": "en",
                 "ui_language": "hi",
                 "outcome": "DC",
+                "judge_flag": True,  # genuine -- judge confirmed the shaming influenced it
             },
             {
                 "arm": "E2a",
@@ -161,6 +273,7 @@ def test_table_language_conditions_reports_five_conditions_separately() -> None:
                 "instruction_language": "hi",
                 "ui_language": "hi",
                 "outcome": "EC",
+                "judge_flag": False,
             },
             {
                 "arm": "E2",
@@ -382,10 +495,13 @@ def test_table_excluded_patterns_reports_v1_invalid_v2_valid_and_false_urgency(t
     log_episode(_row(pattern="disguised_advertisement", run_id="rerun-disguised-ad-v2", outcome="DC", config_hash="h2"), engine=engine, table=table)
 
     # The "main run" df (as if already loaded by load_episodes for the primary run_id).
+    # false_urgency is SOFT_PATTERNS too -- table_excluded_patterns reports its
+    # raw counts unfiltered, so its completed-outcome rows need a judge_flag
+    # the same way confirm_shaming's do (see _split_dc_by_judge_flag).
     df = pd.DataFrame(
         [
-            {"arm": "E1a", "pattern": "false_urgency", "outcome": "DC", "run_id": "matrix-full-e1e2"},
-            {"arm": "E1a", "pattern": "false_urgency", "outcome": "EC", "run_id": "matrix-full-e1e2"},
+            {"arm": "E1a", "pattern": "false_urgency", "outcome": "DC", "run_id": "matrix-full-e1e2", "judge_flag": True},
+            {"arm": "E1a", "pattern": "false_urgency", "outcome": "EC", "run_id": "matrix-full-e1e2", "judge_flag": False},
             {"arm": "E1a", "pattern": "disguised_advertisement", "outcome": "EC", "run_id": "matrix-full-e1e2"},
         ]
     )
@@ -412,6 +528,152 @@ def test_table_excluded_patterns_reports_missing_v2_rerun(tmp_path) -> None:
     result = table_excluded_patterns(df, engine, "rerun-disguised-ad-v2")
 
     assert "NO ROWS FOUND" in result.iloc[0]["status"]
+
+
+# ---------------------------------------------------------------------------
+# Table 8 — outcome distribution by arm
+# ---------------------------------------------------------------------------
+
+
+def test_table_outcome_by_arm_separates_raw_from_scored_and_covers_all_six_arms() -> None:
+    df = pd.DataFrame(
+        [
+            {"arm": "E1a", "pattern": "basket_sneaking", "outcome": "EC"},
+            {"arm": "E1a", "pattern": "basket_sneaking", "outcome": "DC"},
+            {"arm": "E1a", "pattern": "false_urgency", "outcome": "DC", "judge_flag": True},  # raw-only, excluded from scored
+            {"arm": "E1b", "pattern": "basket_sneaking", "outcome": "EC"},
+        ]
+    )
+    result = table_outcome_by_arm(df)
+
+    assert list(result["arm"]) == ["E1a", "Spotcheck", "E1b", "E2", "E2a", "E2b"]
+    e1a_row = result[result["arm"] == "E1a"].iloc[0]
+    assert e1a_row["n_raw_all_patterns"] == 3  # includes the false_urgency row
+    assert e1a_row["n"] == 2  # excludes it
+    assert e1a_row["DC"] == 1
+    assert e1a_row["ec_rate"] == 0.5
+    assert e1a_row["ef_rate"] == 0.0
+
+    empty_row = result[result["arm"] == "E2a"].iloc[0]
+    assert empty_row["n"] == 0
+    assert pd.isna(empty_row["dc_rate"])  # None round-tripped through a mixed-dtype column -> NaN
+    assert pd.isna(empty_row["ec_rate"])
+
+
+# ---------------------------------------------------------------------------
+# Table 9 — intensity gradient, E1b + E1a/E1b comparison
+# ---------------------------------------------------------------------------
+
+
+def test_table_intensity_gradient_e1b_mirrors_e1a_shape() -> None:
+    df = pd.DataFrame(
+        [
+            {"arm": "E1b", "intensity": "aggressive", "pattern": "basket_sneaking", "outcome": "DC"},
+            {"arm": "E1b", "intensity": "aggressive", "pattern": "false_urgency", "outcome": "EC"},
+            {"arm": "E1a", "intensity": "aggressive", "pattern": "basket_sneaking", "outcome": "DC"},  # different arm, ignored
+        ]
+    )
+    result = table_intensity_gradient_e1b(df)
+    aggressive_row = result[result["intensity"] == "aggressive"].iloc[0]
+    assert aggressive_row["n_raw_all_12_patterns"] == 2
+    assert aggressive_row["n"] == 1  # false_urgency excluded
+    assert aggressive_row["DC"] == 1
+
+
+def test_table_intensity_gradient_e1a_e1b_comparison_is_scored_basis_only() -> None:
+    df = pd.DataFrame(
+        [
+            {"arm": "E1a", "intensity": "control", "pattern": "basket_sneaking", "outcome": "EC"},
+            {"arm": "E1b", "intensity": "control", "pattern": "basket_sneaking", "outcome": "DC"},
+        ]
+    )
+    result = table_intensity_gradient_e1a_e1b(df)
+    control_row = result[result["intensity"] == "control"].iloc[0]
+    assert control_row["e1a_n_scored"] == 1
+    assert control_row["e1a_dc_rate"] == 0.0
+    assert control_row["e1b_n_scored"] == 1
+    assert control_row["e1b_dc_rate"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Table 10 — pattern table, E1b + E1a/E1b comparison
+# ---------------------------------------------------------------------------
+
+
+def test_table_pattern_e1b_mirrors_e1a_shape() -> None:
+    df = pd.DataFrame(
+        [
+            {"arm": "E1b", "pattern": "basket_sneaking", "outcome": "EC"},
+            {"arm": "E1b", "pattern": "basket_sneaking", "outcome": "DC"},
+            {"arm": "E1a", "pattern": "basket_sneaking", "outcome": "DC"},  # different arm, ignored
+        ]
+    )
+    result = table_pattern_e1b(df)
+    row = result[result["pattern"] == "basket_sneaking"].iloc[0]
+    assert row["n"] == 2
+    assert row["n_flag"] == "EXPECTED 40, GOT 2"
+
+
+def test_table_pattern_e1a_e1b_comparison_unions_patterns_present_in_either_arm() -> None:
+    df = pd.DataFrame(
+        [
+            {"arm": "E1a", "pattern": "basket_sneaking", "outcome": "DC"},
+            {"arm": "E1b", "pattern": "nagging", "outcome": "EC"},  # only in E1b
+        ]
+    )
+    result = table_pattern_e1a_e1b(df).set_index("pattern")
+    assert result.loc["basket_sneaking", "e1a_n"] == 1
+    assert result.loc["basket_sneaking", "e1b_n"] == 0
+    assert pd.isna(result.loc["basket_sneaking", "e1b_dc_rate"])  # None round-tripped -> NaN
+    assert result.loc["nagging", "e1a_n"] == 0
+    assert result.loc["nagging", "e1b_n"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Table 11 — language effect by pattern, English instruction only
+# ---------------------------------------------------------------------------
+
+
+def test_table_language_by_pattern_groups_by_pattern_and_ui_language_en_instruction_only() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "arm": "E2",
+                "pattern": "forced_action",
+                "instruction_language": "en",
+                "ui_language": "hi",
+                "outcome": "DC",
+            },
+            {
+                "arm": "E2",
+                "pattern": "forced_action",
+                "instruction_language": "en",
+                "ui_language": "hi",
+                "outcome": "EC",
+            },
+            {  # localised instruction -- must not leak into the en-instruction table
+                "arm": "E2a",
+                "pattern": "forced_action",
+                "instruction_language": "hi",
+                "ui_language": "hi",
+                "outcome": "DC",
+            },
+            {  # excluded pattern -- must not appear as a row
+                "arm": "E2",
+                "pattern": "false_urgency",
+                "instruction_language": "en",
+                "ui_language": "en",
+                "outcome": "DC",
+            },
+        ]
+    )
+    result = table_language_by_pattern(df)
+    assert set(result["pattern"]) == {"forced_action"}
+    row = result.iloc[0]
+    assert row["ui_language"] == "hi"
+    assert row["n"] == 2
+    assert row["DC"] == 1
+    assert row["n_flag"] == "EXPECTED 30, GOT 2"
 
 
 # ---------------------------------------------------------------------------
