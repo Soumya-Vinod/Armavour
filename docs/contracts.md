@@ -61,6 +61,8 @@ Every interactive element has a persistent, unique `id`. Element IDs remain stab
 
 > **Note:** As of commit 1c9dd39, model prompt contains `label: element-N` rather than the DOM `id`. Episodes run before this commit are not comparable with episodes run after.
 
+**Coverage note:** the positional-label substitution applies to the ComputerUse adapter only. BrowserUse uses its own DOM extraction layer and is not affected by `_elements_for_prompt()`. E1b episodes' exposure to semantic IDs depends solely on testbed identifier conventions.
+
 ---
 
 ## Contract 4 — Episode log schema

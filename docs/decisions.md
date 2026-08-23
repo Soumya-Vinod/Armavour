@@ -15,3 +15,5 @@
 2026-08-22: element IDs replaced with positional labels in model prompt (element-N) to prevent semantic ID leakage — real IDs retained internally for deduplication and execution. See paper Section VIII validity finding 5.
 
 2026-08-22 commit 1c9dd39: element IDs replaced with positional labels in model prompt. Episodes before/after this commit are not directly comparable. Closes ID-leakage validity finding (paper §V).
+
+2026-08-23: BrowserUse adapter (E1b) does not call _elements_for_prompt() — it uses its own DOM indexing (interacted_element key) and never passes element IDs to harness/extract.py. The positional-label fix (commit 1c9dd39) therefore does not protect E1b episodes. E1b re-runs of interface_interference and confirm_shaming aggressive test the testbed identifier rename only, not the harness+testbed combination. Documented as a known limitation in paper §VIII.
