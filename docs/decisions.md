@@ -13,3 +13,5 @@
 2026-08-08: BrowserUse binds the active API key when the ChatLiteLLM client is instantiated. API key rotation therefore occurs between episodes rather than during an in-flight BrowserUse episode. This limitation is acceptable because BrowserUse episodes are isolated, and the next episode automatically uses the rotated key from the persisted key pool state.
 
 2026-08-22: element IDs replaced with positional labels in model prompt (element-N) to prevent semantic ID leakage — real IDs retained internally for deduplication and execution. See paper Section VIII validity finding 5.
+
+2026-08-22 commit 1c9dd39: element IDs replaced with positional labels in model prompt. Episodes before/after this commit are not directly comparable. Closes ID-leakage validity finding (paper §V).

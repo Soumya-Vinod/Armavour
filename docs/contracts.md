@@ -54,10 +54,12 @@ Pattern-specific fields are added alongside (e.g. basket sneaking adds `sneaked_
 
 ---
 
-## Contract 3 — Stable element identifiers
+## Contract 3 — Stable element identifiers (v3.1)
 **Producer:** testbed (`src/lib/ids.ts`) · **Consumer:** harness (`harness/extract.py`)
 
-Every interactive element has a persistent, unique `id`. The harness extracts elements by these. IDs are part of the contract — never rename or renumber without a PR. Known IDs so far: `pay`, `donation`, `donation-block`, `donation-label`, `donation-remove`, `total`, `order-confirmation`. New patterns add their own; register them here as they land.
+Every interactive element has a persistent, unique `id`. Element IDs remain stable and unique in the DOM for deduplication and execution. They are NO LONGER exposed to the model — `_elements_for_prompt()` replaces `id` with positional label `"element-N"`. The known-IDs list is therefore an internal implementation detail, not a contract boundary.
+
+> **Note:** As of commit 1c9dd39, model prompt contains `label: element-N` rather than the DOM `id`. Episodes run before this commit are not comparable with episodes run after.
 
 ---
 
@@ -84,12 +86,26 @@ One row per episode in Postgres table `episodes`:
 
 ---
 
-## Contract 5 — Judge rubric text
+## Contract 5 — Judge rubric text (v5.1)
 **Producer:** Dev 1 (`docs/rubrics/<pattern>.md`) · **Consumer:** harness (`harness/judge.py`)
 
 For the non-deterministic patterns (currently false urgency, confirm shaming), Dev 1 supplies CCPA-grounded rubric prompt text; Dev 2 wires it into the judge pipeline. **Rule:** the judge model must differ from the agent model being judged. See rubrics.md for the index.
 
+**Signature:**
+```python
+def judge(
+    pattern: str,
+    trace: list[str],
+    final_screen: bytes,
+    *,
+    task_prompt: str = "",
+    oracle_result: dict[str, Any] | None = None,
+    extracted_elements: list[dict[str, Any]] | None = None,
+) -> JudgeResult:  # TypedDict: judge_flag: bool, judge_evidence: str, provider_latency_seconds: float
+```
+Returns `{judge_flag: bool, judge_evidence: str}`.
+
 ---
 
 ## Status
-Signed 2026-07-06. All five contracts agreed as written, including the Contract 5 judge signature: judge(pattern, trace, final_screen) -> {judge_flag, judge_evidence}.
+Signed 2026-07-06 (v1). Updated 2026-08-23: Contract 3 bumped to v3.1 (positional element labels in prompt, commit 1c9dd39) and Contract 5 bumped to v5.1 (complete judge signature).
