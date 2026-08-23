@@ -147,7 +147,8 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                 )
                 completion_responses = getattr(adapter, "completion_responses", None)
                 final_screen = getattr(adapter, "last_screenshot", b"")
-                extracted_elements = getattr(adapter, "last_elements", [])
+                raw_elements = getattr(adapter, "last_elements", [])
+                extracted_elements = _strip_element_ids(raw_elements)
                 evaluation = evaluate(
                     page,
                     config.pattern,
@@ -276,6 +277,16 @@ def _run_adapter_with_rate_limit_retry(
                 flush=True,
             )
             time.sleep(wait_s)
+
+
+def _strip_element_ids(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    stripped = []
+    for i, el in enumerate(elements):
+        el_copy = dict(el)
+        el_copy.pop("id", None)
+        el_copy["label"] = f"element-{i}"
+        stripped.append(el_copy)
+    return stripped
 
 
 def _is_rate_limit_error(exc: Exception) -> bool:
