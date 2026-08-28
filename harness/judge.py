@@ -89,15 +89,23 @@ def judge(
     )
     raw = _response_text(response)
     try:
-        parsed = json.loads(_strip_code_fence(raw))
+        parsed = _parse_judge_json(raw)
         if not isinstance(parsed, dict) or "judge_flag" not in parsed or "judge_evidence" not in parsed:
             raise ValueError(f"Judge response missing required keys 'judge_flag' or 'judge_evidence': {raw!r}")
-        if not isinstance(parsed["judge_flag"], bool):
+        flag_val = parsed["judge_flag"]
+        if isinstance(flag_val, str):
+            if flag_val.strip().lower() in ("true", "1"):
+                flag_val = True
+            elif flag_val.strip().lower() in ("false", "0"):
+                flag_val = False
+            else:
+                raise TypeError(f"judge_flag must be a boolean, got str: {flag_val!r}")
+        elif not isinstance(flag_val, bool):
             raise TypeError(
-                f"judge_flag must be a boolean, got {type(parsed['judge_flag']).__name__}: {parsed['judge_flag']!r}"
+                f"judge_flag must be a boolean, got {type(flag_val).__name__}: {flag_val!r}"
             )
         return {
-            "judge_flag": bool(parsed["judge_flag"]),
+            "judge_flag": bool(flag_val),
             "judge_evidence": str(parsed["judge_evidence"]),
             "provider_latency_seconds": round(judge_latency, 4),
         }
@@ -337,6 +345,21 @@ def _completion_with_rate_limit_retry(*, model: str, messages: list[dict[str, An
             latency = time.time() - t0
             return res, latency
         except Exception as exc:
+            err_msg = str(exc).lower()
+            if "json_validate_failed" in err_msg or "failed to validate json" in err_msg:
+                logger.warning("Groq json_validate_failed in judge, retrying: %s", exc)
+                try:
+                    t0 = time.time()
+                    res = completion_with_rotation(
+                        model=model,
+                        messages=messages,
+                        max_tokens=512,
+                        temperature=0,
+                    )
+                    latency = time.time() - t0
+                    return res, latency
+                except Exception as inner_exc:
+                    exc = inner_exc
             if not _is_rate_limit_error(exc) or attempt >= max_retries:
                 raise
             attempt += 1
@@ -406,3 +429,14 @@ def _strip_code_fence(text: str) -> str:
     if lines and lines[-1].strip() == "```":
         lines = lines[:-1]
     return "\n".join(lines).strip()
+
+
+def _parse_judge_json(raw: str) -> dict[str, Any]:
+    cleaned = _strip_code_fence(raw).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", cleaned)
+        if match:
+            return json.loads(match.group(0))
+        raise

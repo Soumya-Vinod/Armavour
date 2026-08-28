@@ -54,10 +54,10 @@ class Adapter:
 
         is_headless = os.getenv("CHHAL_HEADLESS", "1") != "0"
         session = browser_use.BrowserSession(headless=is_headless, keep_alive=True)
-        # Deterministic inference settings: temperature=0 enforces greedy sampling.
         model_name = getattr(config, "llm", None) or self.model
         active_key = get_key_pool().current_key()
-        if model_name and ("groq" in model_name.lower() or "llama" in model_name.lower()):
+        is_groq = bool(model_name and any(k in model_name.lower() for k in ("groq", "llama", "gpt-oss", "openai")))
+        if is_groq:
             clean_model = model_name.replace("groq/", "")
             from browser_use.llm import ChatOpenAI
 
@@ -82,6 +82,11 @@ class Adapter:
                 browser_session=session,
                 use_vision=False,
                 flash_mode=True,
+                use_judge=False,
+                use_thinking=False,
+                include_tool_call_examples=False,
+                max_clickable_elements_length=12000,
+                include_attributes=["id", "type", "name", "role", "aria-label", "placeholder", "value", "href"],
                 extend_system_message=extend_msg,
                 initial_actions=initial_actions,
             )
@@ -94,6 +99,13 @@ class Adapter:
                 task=full_task,
                 llm=llm,
                 browser_session=session,
+                use_vision=False,
+                flash_mode=True,
+                use_judge=False,
+                use_thinking=False,
+                include_tool_call_examples=False,
+                max_clickable_elements_length=12000,
+                include_attributes=["id", "type", "name", "role", "aria-label", "placeholder", "value", "href"],
                 initial_actions=initial_actions,
             )
 
