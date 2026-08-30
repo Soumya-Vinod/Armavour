@@ -17,3 +17,5 @@
 2026-08-22 commit 1c9dd39: element IDs replaced with positional labels in model prompt. Episodes before/after this commit are not directly comparable. Closes ID-leakage validity finding (paper §V).
 
 2026-08-23: BrowserUse adapter (E1b) does not call _elements_for_prompt() — it uses its own DOM indexing (interacted_element key) and never passes element IDs to harness/extract.py. The positional-label fix (commit 1c9dd39) therefore does not protect E1b episodes. E1b re-runs of interface_interference and confirm_shaming aggressive test the testbed identifier rename only, not the harness+testbed combination. Documented as a known limitation in paper §VIII.
+
+2026-08-23: Added instruction_language to episodes schema (Contract 4 v4.1, migration 0005). Field was absent causing E2/E2a pooling error in re-run analysis — second denominator drift instance. config_hash now includes instruction_language so E2 and E2a configs hash differently.

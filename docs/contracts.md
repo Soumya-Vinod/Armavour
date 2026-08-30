@@ -65,7 +65,7 @@ Every interactive element has a persistent, unique `id`. Element IDs remain stab
 
 ---
 
-## Contract 4 — Episode log schema
+## Contract 4 — Episode log schema (v4.1)
 **Producer:** harness (`infra/migrations`, `harness/logger.py`) · **Consumer:** analysis (`analysis/load.py`)
 
 One row per episode in Postgres table `episodes`:
@@ -76,6 +76,7 @@ One row per episode in Postgres table `episodes`:
 | `run_id` | text | groups a batch |
 | `config_hash` | text | unique per scenario+repeat; idempotency key |
 | `site`, `pattern`, `intensity`, `language` | text | from Contract 1 |
+| `instruction_language` | varchar | nullable (see note below) |
 | `agent`, `llm`, `seed` | text/int | |
 | `placed` | bool | order completed |
 | `avoided` | bool/null | from oracle/judge |
@@ -85,6 +86,8 @@ One row per episode in Postgres table `episodes`:
 | `judge_evidence` | text | |
 | `trace` | jsonb | agent reasoning steps |
 | `created_at` | timestamp | |
+
+> **Note:** `instruction_language` is nullable for backward compatibility with pre-amendment episodes. None/NULL means instruction language was not recorded (pre-amendment) or matches interface language (E1 arms).
 
 ---
 
@@ -110,4 +113,4 @@ Returns `{judge_flag: bool, judge_evidence: str}`.
 ---
 
 ## Status
-Signed 2026-07-06 (v1). Updated 2026-08-23: Contract 3 bumped to v3.1 (positional element labels in prompt, commit 1c9dd39) and Contract 5 bumped to v5.1 (complete judge signature).
+Signed 2026-07-06 (v1). Updated 2026-08-23: Contract 3 bumped to v3.1 (positional element labels in prompt, commit 1c9dd39), Contract 4 bumped to v4.1 (instruction_language added, migration 0005), and Contract 5 bumped to v5.1 (complete judge signature).
