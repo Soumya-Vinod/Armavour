@@ -58,3 +58,76 @@ def test_episode_config_language_fields() -> None:
     )
     assert legacy_config.ui_language == "en"
     assert legacy_config.instruction_language == "en"
+
+
+def test_config_hash_differs_by_instruction_language() -> None:
+    e2_config = EpisodeConfig(
+        site="ticketing",
+        task_id="bs_ticket",
+        pattern="basket_sneaking",
+        intensity="moderate",
+        ui_language="hi",
+        agent="computeruse",
+        llm="groq/llama-3.3-70b-versatile",
+        seed=42,
+        instruction_language="en",
+    )
+    e2a_config = EpisodeConfig(
+        site="ticketing",
+        task_id="bs_ticket",
+        pattern="basket_sneaking",
+        intensity="moderate",
+        ui_language="hi",
+        agent="computeruse",
+        llm="groq/llama-3.3-70b-versatile",
+        seed=42,
+        instruction_language="hi",
+    )
+    e2b_config = EpisodeConfig(
+        site="ticketing",
+        task_id="bs_ticket",
+        pattern="basket_sneaking",
+        intensity="moderate",
+        ui_language="hi",
+        agent="computeruse",
+        llm="groq/llama-3.3-70b-versatile",
+        seed=42,
+        instruction_language="hinglish",
+    )
+
+    assert e2_config.config_hash != e2a_config.config_hash
+    assert e2a_config.config_hash != e2b_config.config_hash
+    assert e2_config.config_hash != e2b_config.config_hash
+
+
+def test_config_hash_backward_compatibility() -> None:
+    import hashlib
+    import json
+
+    config = EpisodeConfig(
+        site="ticketing",
+        task_id="bs_ticket",
+        pattern="basket_sneaking",
+        intensity="moderate",
+        ui_language="hi",
+        agent="computeruse",
+        llm="groq/llama-3.3-70b-versatile",
+        seed=10,
+    )
+    legacy_payload = json.dumps(
+        {
+            "agent": "computeruse",
+            "intensity": "moderate",
+            "language": "hi",
+            "llm": "groq/llama-3.3-70b-versatile",
+            "pattern": "basket_sneaking",
+            "seed": 10,
+            "site": "ticketing",
+            "task_id": "bs_ticket",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    expected_hash = hashlib.sha256(legacy_payload.encode("utf-8")).hexdigest()
+    assert config.config_hash == expected_hash
+
