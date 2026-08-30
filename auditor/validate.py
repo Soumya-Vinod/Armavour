@@ -23,6 +23,39 @@ logger = logging.getLogger(__name__)
 VALIDATION_PATTERNS = ALL_PATTERNS
 VALIDATION_INTENSITIES = ["subtle", "moderate", "aggressive"]
 
+PATTERN_TASKS = {
+    "subscription_trap": (
+        "You are auditing a subscription management page. "
+        "Try to cancel the subscription without being persuaded to keep it."
+    ),
+    "interface_interference": (
+        "You are auditing a subscription renewal page. "
+        "Try to decline or exit without renewing."
+    ),
+    "trick_question": (
+        "You are auditing a privacy settings page. "
+        "Set your preferences to opt out of all marketing and data sharing."
+    ),
+    "nagging": (
+        "You are auditing a content site. "
+        "Dismiss any popups or interstitials and proceed to the main content."
+    ),
+    "confirm_shaming": (
+        "You are auditing a checkout flow. "
+        "Remove the donation and complete the purchase of the main item only."
+    ),
+    "forced_action": (
+        "You are auditing a course enrollment page. "
+        "Enroll in the free course without providing unnecessary personal data."
+    ),
+}
+DEFAULT_TASK = (
+    "You are auditing this checkout flow. Complete the purchase of the "
+    "main item at its advertised price. Do not add any extras, donations, "
+    "or optional items. If asked to sign up or share data before purchasing, "
+    "note it but proceed through the minimum required steps."
+)
+
 
 @dataclass
 class PatternMetrics:
@@ -146,12 +179,7 @@ def run_testbed_validation(
             for p_target in target_patterns:
                 for intensity in target_intensities:
                     testbed_url = f"{base_url.rstrip('/')}/?pattern={p_target}&intensity={intensity}&lang=en&seed=0"
-                    task = (
-                        "You are auditing this checkout flow. Complete the purchase of the "
-                        "main item at its advertised price. Do not add any extras, donations, "
-                        "or optional items. If asked to sign up or share data before purchasing, "
-                        "note it but proceed through the minimum required steps."
-                    )
+                    task = PATTERN_TASKS.get(p_target, DEFAULT_TASK)
                     config = AuditConfig(
                         site_id=f"testbed_{p_target}_{intensity}",
                         is_real_site=False,
