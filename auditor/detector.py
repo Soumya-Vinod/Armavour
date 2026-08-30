@@ -655,20 +655,76 @@ def _run_judge_detector(pattern: str, trace: AuditTrace, candidate_steps: list[A
 
 
 def detect_confirm_shaming(trace: AuditTrace) -> Detection:
-    """Evaluate confirm shaming for steps containing decline/cancel options."""
-    shame_keywords = ("no thanks", "decline", "cancel", "remove", "don't want", "skip")
+    """Evaluate confirm shaming for steps containing emotionally loaded guilt-framing decline language."""
+    guilt_substrings = (
+        "cold-blooded",
+        "don't care about",
+        "dont care about",
+        "heartless",
+        "selfish",
+        "don't care",
+        "dont care",
+        "don't want to fund",
+        "dont want to fund",
+        "won't",
+        "wont",
+        "refuse",
+    )
+    guilt_phrase_regex = re.compile(
+        r"\b(?:yes|no),?\s*i\s+(?:am\s+)?[a-z\s-]{2,}",
+        re.IGNORECASE,
+    )
+
+    def _has_guilt_language(dom_lower: str) -> bool:
+        if any(sub in dom_lower for sub in guilt_substrings):
+            return True
+        for match in guilt_phrase_regex.finditer(dom_lower):
+            phrase = match.group(0)
+            if any(term in phrase for term in ("cold-blooded", "heartless", "selfish", "care", "refuse", "bad", "shame", "cheap", "hate")):
+                return True
+        return False
+
     candidate_steps = [
         s for s in trace.steps
-        if any(kw in s.dom_snapshot.lower() for kw in shame_keywords)
+        if _has_guilt_language(s.dom_snapshot.lower())
     ]
     return _run_judge_detector("confirm_shaming", trace, candidate_steps)
 
 
 def detect_interface_interference(trace: AuditTrace) -> Detection:
-    """Evaluate interface interference for steps with multiple CTAs."""
+    """Evaluate interface interference for steps with asymmetric CTA button styling."""
+    primary_classes = ("ii-primary", "ii-primary-lg")
+    secondary_classes = ("ii-muted-sm", "ii-muted-link", "ii-risk", "ii-hidden-x")
+
+    def _has_cta_asymmetry(dom: str) -> bool:
+        dom_lower = dom.lower()
+
+        # Check for ii-actions container
+        container_regex = re.compile(
+            r'<div[^>]*class=["\'][^"\']*\bii-actions\b[^"\']*["\'][^>]*>(.*?)</div>',
+            re.IGNORECASE | re.DOTALL,
+        )
+        containers = container_regex.findall(dom)
+
+        for container in containers:
+            cont_lower = container.lower()
+            has_primary = (
+                any(cls in cont_lower for cls in primary_classes)
+                or ("<button" in cont_lower and "autofocus" in cont_lower)
+            )
+            has_secondary = (
+                any(cls in cont_lower for cls in secondary_classes)
+                or "<a" in cont_lower
+                or "ii-hidden-x" in dom_lower
+            )
+            if has_primary and has_secondary:
+                return True
+
+        return False
+
     candidate_steps = [
         s for s in trace.steps
-        if s.dom_snapshot.lower().count("<button") >= 2 or s.dom_snapshot.lower().count("role=\"button\"") >= 2
+        if _has_cta_asymmetry(s.dom_snapshot)
     ]
     return _run_judge_detector("interface_interference", trace, candidate_steps)
 
