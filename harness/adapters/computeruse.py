@@ -140,22 +140,39 @@ class Adapter:
         # Deterministic inference settings: temperature=0 enforces greedy sampling.
         # Backend provider seed parameters are passed where supported by LiteLLM backends.
         t0 = time.time()
-        response = completion_with_rotation(
-            model=self.model,
-            temperature=0,
-            max_tokens=1000,
-            response_format={"type": "json_object"},
-            drop_params=True,
-            timeout=float(os.getenv("CHHAL_PROVIDER_TIMEOUT_S", str(DEFAULT_PROVIDER_TIMEOUT_S))),
-            messages=[{"role": "user", "content": json.dumps(prompt, sort_keys=True)}],
-        )
+        max_tokens = int(os.getenv("CHHAL_MAX_TOKENS", "2048"))
+        timeout = float(os.getenv("CHHAL_PROVIDER_TIMEOUT_S", str(DEFAULT_PROVIDER_TIMEOUT_S)))
+        messages = [{"role": "user", "content": json.dumps(prompt, sort_keys=True)}]
+
+        try:
+            response = completion_with_rotation(
+                model=self.model,
+                temperature=0,
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"},
+                drop_params=True,
+                timeout=timeout,
+                messages=messages,
+            )
+        except Exception as exc:
+            err_msg = str(exc).lower()
+            if "json_validate_failed" in err_msg or "failed to validate json" in err_msg:
+                logger.warning("Groq json_validate_failed in computeruse adapter, retrying without response_format: %s", exc)
+                response = completion_with_rotation(
+                    model=self.model,
+                    temperature=0,
+                    max_tokens=max_tokens,
+                    drop_params=True,
+                    timeout=timeout,
+                    messages=messages,
+                )
+            else:
+                raise
+
         self.provider_latency_seconds += (time.time() - t0)
         self.completion_responses.append(response)
         text = _response_text(response)
-        try:
-            action = json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Model did not return valid JSON: {text}") from exc
+        action = _parse_action_json(text)
 
         return action, _usage_tokens(response)
 
@@ -205,7 +222,7 @@ def _response_text(response: Any) -> str:
     content = getattr(message, "content", None)
     if content is None and isinstance(message, dict):
         content = message.get("content")
-    if isinstance(content, str):
+    if isinstance(content, str) and content.strip():
         return content.strip()
     if isinstance(content, list):
         parts: list[str] = []
@@ -215,8 +232,45 @@ def _response_text(response: Any) -> str:
                 text = block.get("text")
             if text:
                 parts.append(str(text))
-        return "\n".join(parts).strip()
+        res = "\n".join(parts).strip()
+        if res:
+            return res
+
+    # Fallback to reasoning fields for reasoning models (e.g. GPT-OSS / DeepSeek R1)
+    reasoning = (
+        getattr(message, "reasoning", None)
+        or getattr(message, "reasoning_content", None)
+        or (message.get("reasoning") if isinstance(message, dict) else None)
+        or (message.get("reasoning_content") if isinstance(message, dict) else None)
+    )
+    if isinstance(reasoning, str) and reasoning.strip():
+        return reasoning.strip()
+
     return ""
+
+
+def _parse_action_json(raw: str) -> dict[str, Any]:
+    stripped = raw.strip()
+    # Strip markdown code fence if present
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        import re
+        match = re.search(r"\{[\s\S]*\}", stripped)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+        raise ValueError(f"Model did not return valid JSON: {raw}")
 
 
 def _usage_tokens(response: Any) -> dict[str, int]:

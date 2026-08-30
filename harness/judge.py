@@ -335,11 +335,12 @@ def _completion_with_rate_limit_retry(*, model: str, messages: list[dict[str, An
             _apply_groq_delay(model)
             # Deterministic inference settings: temperature=0 ensures greedy sampling.
             # Backend provider seed parameter is handled by LiteLLM where supported.
+            max_tokens = int(os.getenv("CHHAL_JUDGE_MAX_TOKENS", "2048"))
             t0 = time.time()
             res = completion_with_rotation(
                 model=model,
                 messages=messages,
-                max_tokens=512,
+                max_tokens=max_tokens,
                 temperature=0,
             )
             latency = time.time() - t0
@@ -353,7 +354,7 @@ def _completion_with_rate_limit_retry(*, model: str, messages: list[dict[str, An
                     res = completion_with_rotation(
                         model=model,
                         messages=messages,
-                        max_tokens=512,
+                        max_tokens=max_tokens,
                         temperature=0,
                     )
                     latency = time.time() - t0
@@ -405,7 +406,7 @@ def _response_text(response: Any) -> str:
     content = getattr(message, "content", None)
     if content is None and isinstance(message, dict):
         content = message.get("content")
-    if isinstance(content, str):
+    if isinstance(content, str) and content.strip():
         return content.strip()
     if isinstance(content, list):
         parts: list[str] = []
@@ -415,7 +416,20 @@ def _response_text(response: Any) -> str:
                 text = block.get("text")
             if text:
                 parts.append(str(text))
-        return "\n".join(parts).strip()
+        res = "\n".join(parts).strip()
+        if res:
+            return res
+
+    # Fallback to reasoning fields for reasoning models
+    reasoning = (
+        getattr(message, "reasoning", None)
+        or getattr(message, "reasoning_content", None)
+        or (message.get("reasoning") if isinstance(message, dict) else None)
+        or (message.get("reasoning_content") if isinstance(message, dict) else None)
+    )
+    if isinstance(reasoning, str) and reasoning.strip():
+        return reasoning.strip()
+
     return ""
 
 
