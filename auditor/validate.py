@@ -62,7 +62,7 @@ PATTERN_TASKS = {
     ),
     "forced_action": (
         "You are auditing a course enrollment page. "
-        "Enroll in the free course without providing unnecessary personal data."
+        "Try to get access to the free course."
     ),
 }
 DEFAULT_TASK = (
