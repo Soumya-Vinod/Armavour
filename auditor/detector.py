@@ -493,7 +493,7 @@ def detect_nagging(trace: AuditTrace) -> Detection:
 
 
 def detect_subscription_trap(trace: AuditTrace) -> Detection:
-    """Scan checkout steps for pre-selected recurring billing options."""
+    """Detect subscription cancellation friction, missing affordance, or mandatory card entry during cancellation."""
     if not trace.steps:
         return Detection(
             pattern="subscription_trap",
@@ -504,37 +504,69 @@ def detect_subscription_trap(trace: AuditTrace) -> Detection:
             detection_method="deterministic",
         )
 
-    recurring_keywords = ("monthly", "annual", "annually", "recurring", "auto-renew", "subscription", "per month", "per year")
-    checked_input_regex = re.compile(
-        r'<input[^>]+(?:type=["\'](?:radio|checkbox)["\']|checked)[^>]*>',
+    cancel_keywords = ("cancel", "unsubscribe", "end subscription", "stop subscription")
+    cancel_affordance_regex = re.compile(
+        r'<(?:button|a|input)[^>]*>[^<]*(?:cancel|unsubscribe|end subscription|stop subscription)[^<]*</(?:button|a)>|'
+        r'<input[^>]+value=["\'][^"\']*(?:cancel|unsubscribe|end subscription|stop subscription)[^"\']*["\']',
+        re.IGNORECASE,
+    )
+    card_input_regex = re.compile(
+        r'(?:card[_-]?number|cvv|expiry|cardholder|card[_-]?name)',
         re.IGNORECASE,
     )
 
+    # 1. Check if card details form appears before / during cancellation flow
     for step in trace.steps:
-        dom = step.dom_snapshot
-        inputs = checked_input_regex.findall(dom)
-        for inp in inputs:
-            inp_lower = inp.lower()
-            is_checked = "checked" in inp_lower or "aria-checked=\"true\"" in inp_lower
-            if is_checked:
-                pos = dom.find(inp)
-                if pos != -1:
-                    snippet = dom[max(0, pos - 250) : min(len(dom), pos + 350)].lower()
-                    if any(kw in snippet for kw in recurring_keywords):
-                        return Detection(
-                            pattern="subscription_trap",
-                            detected=True,
-                            confidence="high",
-                            evidence=f"Pre-selected recurring billing option found in DOM at step {step.step_index}.",
-                            step_index=step.step_index,
-                            detection_method="deterministic",
-                        )
+        dom = step.dom_snapshot or ""
+        if card_input_regex.search(dom):
+            if any(kw in dom.lower() for kw in cancel_keywords):
+                return Detection(
+                    pattern="subscription_trap",
+                    detected=True,
+                    confidence="high",
+                    evidence=f"Payment/card details required during cancellation flow at step {step.step_index}.",
+                    step_index=step.step_index,
+                    detection_method="deterministic",
+                )
+
+    # 2. Count steps required to reach a cancellation confirmation
+    cancel_steps = [
+        step
+        for step in trace.steps
+        if any(kw in (step.dom_snapshot or "").lower() for kw in cancel_keywords)
+    ]
+    if len(cancel_steps) > 2:
+        return Detection(
+            pattern="subscription_trap",
+            detected=True,
+            confidence="high",
+            evidence=f"Cancellation required {len(cancel_steps)} steps (threshold: 2)",
+            step_index=cancel_steps[-1].step_index,
+            detection_method="deterministic",
+        )
+
+    # 3. Check if cancel affordance is discoverable in first 3 steps
+    early_steps = trace.steps[: min(3, len(trace.steps))]
+    has_early_affordance = any(
+        cancel_affordance_regex.search(step.dom_snapshot or "")
+        or any(kw in (step.dom_snapshot or "").lower() for kw in cancel_keywords)
+        for step in early_steps
+    )
+    if not has_early_affordance and len(trace.steps) >= 3:
+        return Detection(
+            pattern="subscription_trap",
+            detected=True,
+            confidence="medium",
+            evidence="No cancel affordance found in first 3 steps",
+            step_index=min(2, len(trace.steps) - 1),
+            detection_method="deterministic",
+        )
 
     return Detection(
         pattern="subscription_trap",
         detected=False,
         confidence="high",
-        evidence="No pre-selected recurring billing options found at checkout",
+        evidence="No subscription cancellation friction or traps detected",
         step_index=0,
         detection_method="deterministic",
     )
