@@ -240,6 +240,52 @@ def detect_drip_pricing(trace: AuditTrace) -> Detection:
     )
 
 
+def _extract_product_identities(steps: list[AuditStep]) -> tuple[list[str], list[str]]:
+    """Extract product names and IDs from a list of steps' DOM and cart states."""
+    attr_id_regex = re.compile(
+        r'(?:data-product|data-id|data-item-id)\s*=\s*["\']([^"\']+)["\']',
+        re.IGNORECASE,
+    )
+    heading_regex = re.compile(r'<(?:h1|h2)[^>]*>(.*?)</(?:h1|h2)>', re.IGNORECASE | re.DOTALL)
+    class_regex = re.compile(
+        r'<[a-zA-Z0-9]+[^>]*class=["\'][^"\']*(?:product-name|item-name)[^"\']*["\'][^>]*>(.*?)</[a-zA-Z0-9]+>',
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    names: list[str] = []
+    ids: list[str] = []
+
+    for step in steps:
+        dom = step.dom_snapshot or ""
+        for match in attr_id_regex.finditer(dom):
+            val = match.group(1).strip()
+            if val and val not in ids:
+                ids.append(val)
+
+        for match in heading_regex.finditer(dom):
+            clean = re.sub(r'<[^>]+>', ' ', match.group(1)).strip()
+            clean = ' '.join(clean.split())
+            if clean and clean not in names and len(clean) < 100:
+                names.append(clean)
+
+        for match in class_regex.finditer(dom):
+            clean = re.sub(r'<[^>]+>', ' ', match.group(1)).strip()
+            clean = ' '.join(clean.split())
+            if clean and clean not in names and len(clean) < 100:
+                names.append(clean)
+
+        if step.cart_state and step.cart_state.get("items"):
+            for item in step.cart_state["items"]:
+                if isinstance(item, dict) and item.get("name"):
+                    iname = str(item["name"]).strip()
+                    if iname and iname not in names:
+                        names.append(iname)
+                elif isinstance(item, str) and item.strip() and item.strip() not in names:
+                    names.append(item.strip())
+
+    return names, ids
+
+
 def detect_bait_and_switch(trace: AuditTrace) -> Detection:
     """Compare product/price shown on listing (steps 0-2) vs checkout (last 3 steps)."""
     if len(trace.steps) < 2:
@@ -255,26 +301,54 @@ def detect_bait_and_switch(trace: AuditTrace) -> Detection:
     listing_steps = trace.steps[: min(3, len(trace.steps))]
     checkout_steps = trace.steps[max(0, len(trace.steps) - 3) :]
 
+    list_names, list_ids = _extract_product_identities(listing_steps)
+    check_names, check_ids = _extract_product_identities(checkout_steps)
+
+    # Check 1: Product ID changed
+    if list_ids and check_ids and list_ids[0] != check_ids[0]:
+        return Detection(
+            pattern="bait_and_switch",
+            detected=True,
+            confidence="high",
+            evidence=f"Product shown as {list_ids[0]} at listing, {check_ids[0]} at checkout.",
+            step_index=checkout_steps[-1].step_index,
+            detection_method="deterministic",
+        )
+
+    # Check 2: Product Name changed
+    if list_names and check_names and list_names[0].lower() != check_names[0].lower():
+        return Detection(
+            pattern="bait_and_switch",
+            detected=True,
+            confidence="high",
+            evidence=f"Product shown as {list_names[0]} at listing, {check_names[0]} at checkout.",
+            step_index=checkout_steps[-1].step_index,
+            detection_method="deterministic",
+        )
+
+    # Check 3: Numeric price changed
     listing_prices = [
         s.cart_state.get("total")
         for s in listing_steps
-        if s.cart_state and s.cart_state.get("total")
+        if s.cart_state and s.cart_state.get("total") is not None
     ]
     checkout_prices = [
         s.cart_state.get("total")
         for s in checkout_steps
-        if s.cart_state and s.cart_state.get("total")
+        if s.cart_state and s.cart_state.get("total") is not None
     ]
 
     if listing_prices and checkout_prices:
         p_list = listing_prices[0]
         p_check = checkout_prices[-1]
         if abs(p_list - p_check) > 0.01:
+            p_list_val = int(p_list) if isinstance(p_list, (int, float)) and float(p_list).is_integer() else p_list
+            p_check_val = int(p_check) if isinstance(p_check, (int, float)) and float(p_check).is_integer() else p_check
             return Detection(
                 pattern="bait_and_switch",
                 detected=True,
-                confidence="high",
-                evidence=f"Product shown as Rs {p_list} at listing, Rs {p_check} at checkout.",
+                confidence="medium",
+                evidence=f"Price shown as Rs {p_list_val} at listing, Rs {p_check_val} at checkout.",
                 step_index=checkout_steps[-1].step_index,
                 detection_method="deterministic",
             )
