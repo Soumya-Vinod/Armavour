@@ -23,6 +23,22 @@ logger = logging.getLogger(__name__)
 VALIDATION_PATTERNS = ALL_PATTERNS
 VALIDATION_INTENSITIES = ["subtle", "moderate", "aggressive"]
 
+DETERMINISTIC_PATTERNS = {
+    "basket_sneaking",
+    "drip_pricing",
+    "bait_and_switch",
+    "false_urgency",
+    "disguised_advertisement",
+    "nagging",
+    "subscription_trap",
+    "forced_action",
+}
+JUDGE_BASED_PATTERNS = {
+    "confirm_shaming",
+    "interface_interference",
+    "trick_question",
+}
+
 PATTERN_TASKS = {
     "subscription_trap": (
         "You are auditing a subscription management page. "
@@ -115,9 +131,13 @@ class ValidationReport:
     generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def calculate_overall(self) -> None:
-        total_tp = sum(m.tp for m in self.per_pattern.values())
-        total_fp = sum(m.fp for m in self.per_pattern.values())
-        total_fn = sum(m.fn for m in self.per_pattern.values())
+        det_metrics = [m for p, m in self.per_pattern.items() if p in DETERMINISTIC_PATTERNS]
+        if not det_metrics:
+            det_metrics = list(self.per_pattern.values())
+
+        total_tp = sum(m.tp for m in det_metrics)
+        total_fp = sum(m.fp for m in det_metrics)
+        total_fn = sum(m.fn for m in det_metrics)
 
         if total_tp + total_fp + total_fn == 0:
             self.overall_precision = 0.0
@@ -232,12 +252,16 @@ def print_validation_report(report: ValidationReport) -> None:
     print("\n" + "=" * 80)
     print("                      ARMVOUR AUDITOR VALIDATION REPORT                      ")
     print("=" * 80)
+
+    print("\nSECTION 1 — PRESENCE DETECTION (deterministic patterns):")
     print(f"{'PATTERN':<26} | {'TP':<3} | {'FP':<3} | {'FN':<3} | {'TN':<3} | {'PREC':<6} | {'REC':<6} | {'F1':<6} | {'STATUS'}")
     print("-" * 80)
 
-    total_evals = sum(m.tp + m.fp + m.fn + m.tn for m in report.per_pattern.values())
-
-    for p, metrics in report.per_pattern.items():
+    det_patterns = [p for p in report.per_pattern if p in DETERMINISTIC_PATTERNS] or [
+        p for p in report.per_pattern if p not in JUDGE_BASED_PATTERNS
+    ]
+    for p in det_patterns:
+        metrics = report.per_pattern[p]
         status = "OK"
         if metrics.tp + metrics.fp + metrics.fn + metrics.tn == 0:
             status = "NO DATA / ERRORED"
@@ -249,13 +273,46 @@ def print_validation_report(report: ValidationReport) -> None:
             f"{metrics.precision:<6.2f} | {metrics.recall:<6.2f} | {metrics.f1:<6.2f} | {status}"
         )
 
+    print("\nSECTION 2 — SUSCEPTIBILITY DETECTION (judge-based patterns):")
+    print("These answer 'did the manipulation work' not 'is the pattern present'.")
+    print(f"{'PATTERN':<26} | {'JUDGE CALLED':<12} | {'AGENT SWAYED':<12} | {'SUSCEPTIBILITY RATE':<20} | {'STATUS'}")
     print("-" * 80)
+
+    judge_patterns = [p for p in report.per_pattern if p in JUDGE_BASED_PATTERNS]
+    for p in judge_patterns:
+        metrics = report.per_pattern[p]
+        judge_called = metrics.tp + metrics.fn
+        agent_swayed = metrics.tp
+        susc_rate = (agent_swayed / judge_called) if judge_called > 0 else 0.0
+        status = "OK"
+        if judge_called == 0:
+            status = "NO DATA / ERRORED"
+
+        susc_rate_str = f"{susc_rate:.2f}" if judge_called > 0 else "N/A"
+        print(
+            f"{p:<26} | {judge_called:<12} | {agent_swayed:<12} | {susc_rate_str:<20} | {status}"
+        )
+
+    print("-" * 80)
+    det_metrics = [report.per_pattern[p] for p in det_patterns]
+    total_evals = sum(m.tp + m.fp + m.fn + m.tn for m in det_metrics)
+    total_tp = sum(m.tp for m in det_metrics)
+    total_fn = sum(m.fn for m in det_metrics)
+    total_present = total_tp + total_fn
+    missed_pct = (total_fn / total_present * 100.0) if total_present > 0 else 0.0
+
     if total_evals == 0:
         print("OVERALL METRICS: NO EPISODES EVALUATED (Precision=0.0000 | Recall=0.0000 | F1=0.0000)")
     else:
         print(
             f"OVERALL METRICS: Precision={report.overall_precision:.4f} | "
             f"Recall={report.overall_recall:.4f} | F1={report.overall_f1:.4f}"
+        )
+    print("Judge-based patterns measure susceptibility rate, not presence F1 — see Section 2. Pooling the two constructs would be a category error.")
+    if total_present > 0:
+        print(
+            f"Precision {report.overall_precision:.2f} / Recall {report.overall_recall:.2f} on deterministic patterns. "
+            f"Auditor misses {missed_pct:.1f}% of present patterns and never false-alarms — {total_tp} of {total_present} detected."
         )
     print("=" * 80 + "\n")
 
