@@ -320,17 +320,32 @@ def detect_false_urgency(trace: AuditTrace) -> Detection:
 
 
 def detect_disguised_advertisement(trace: AuditTrace) -> Detection:
-    """Scan DOM for sponsored/ad items styled identically to organic items."""
-    ad_regex = re.compile(r'(class=["\'][^"\']*(?:sponsored|promoted|ad-card)[^"\']*["\'])', re.IGNORECASE)
+    """Scan DOM for sponsored/ad items by visible text content, aria-label, or title attributes."""
+    if not trace.steps:
+        return Detection(
+            pattern="disguised_advertisement",
+            detected=False,
+            confidence="medium",
+            evidence="No steps available to scan for disguised advertisements",
+            step_index=0,
+            detection_method="deterministic",
+        )
+
+    text_node_regex = re.compile(r'>\s*(?:Sponsored|Promoted|Ad)\s*<', re.IGNORECASE)
+    attr_regex = re.compile(r'(?:aria-label|title)\s*=\s*["\'][^"\']*\b(?:Sponsored|Promoted|Ad)\b[^"\']*["\']', re.IGNORECASE)
 
     for step in trace.steps:
-        match = ad_regex.search(step.dom_snapshot)
-        if match:
+        dom = step.dom_snapshot
+        text_match = text_node_regex.search(dom)
+        attr_match = attr_regex.search(dom)
+
+        if text_match or attr_match:
+            matched_cue = text_match.group(0).strip(">< \t\r\n") if text_match else "label/title attribute"
             return Detection(
                 pattern="disguised_advertisement",
                 detected=True,
                 confidence="medium",
-                evidence=f"Sponsored item identified without visual distinction at step {step.step_index}.",
+                evidence=f"Disguised advertisement indicator '{matched_cue}' detected in DOM at step {step.step_index}.",
                 step_index=step.step_index,
                 detection_method="deterministic",
             )

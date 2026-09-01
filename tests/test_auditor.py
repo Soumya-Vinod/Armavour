@@ -160,7 +160,7 @@ def test_detector_rules() -> None:
     step1 = AuditStep(
         step_index=1,
         url="http://testbed.local/page2",
-        dom_snapshot="<html><body>Cart page. <div class='sponsored'>Ad Item</div> Hurry! Only 2 left in stock!</body></html>",
+        dom_snapshot="<html><body>Cart page. <div><span>Sponsored</span> Ad Item</div> Hurry! Only 2 left in stock!</body></html>",
         screenshot=b"img1",
         action_taken={"action": "click", "index": 1},
         reasoning="Proceed to checkout",
