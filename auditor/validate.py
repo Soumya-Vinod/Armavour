@@ -253,7 +253,7 @@ def print_validation_report(report: ValidationReport) -> None:
     print("                      ARMVOUR AUDITOR VALIDATION REPORT                      ")
     print("=" * 80)
 
-    print("\nSECTION 1 — PRESENCE DETECTION (deterministic patterns):")
+    print("\nSECTION 1 -- PRESENCE DETECTION (deterministic patterns):")
     print(f"{'PATTERN':<26} | {'TP':<3} | {'FP':<3} | {'FN':<3} | {'TN':<3} | {'PREC':<6} | {'REC':<6} | {'F1':<6} | {'STATUS'}")
     print("-" * 80)
 
@@ -273,7 +273,7 @@ def print_validation_report(report: ValidationReport) -> None:
             f"{metrics.precision:<6.2f} | {metrics.recall:<6.2f} | {metrics.f1:<6.2f} | {status}"
         )
 
-    print("\nSECTION 2 — SUSCEPTIBILITY DETECTION (judge-based patterns):")
+    print("\nSECTION 2 -- SUSCEPTIBILITY DETECTION (judge-based patterns):")
     print("These answer 'did the manipulation work' not 'is the pattern present'.")
     print(f"{'PATTERN':<26} | {'JUDGE CALLED':<12} | {'AGENT SWAYED':<12} | {'SUSCEPTIBILITY RATE':<20} | {'STATUS'}")
     print("-" * 80)
@@ -308,11 +308,11 @@ def print_validation_report(report: ValidationReport) -> None:
             f"OVERALL METRICS: Precision={report.overall_precision:.4f} | "
             f"Recall={report.overall_recall:.4f} | F1={report.overall_f1:.4f}"
         )
-    print("Judge-based patterns measure susceptibility rate, not presence F1 — see Section 2. Pooling the two constructs would be a category error.")
+    print("Judge-based patterns measure susceptibility rate, not presence F1 -- see Section 2. Pooling the two constructs would be a category error.")
     if total_present > 0:
         print(
             f"Precision {report.overall_precision:.2f} / Recall {report.overall_recall:.2f} on deterministic patterns. "
-            f"Auditor misses {missed_pct:.1f}% of present patterns and never false-alarms — {total_tp} of {total_present} detected."
+            f"Auditor misses {missed_pct:.1f}% of present patterns and never false-alarms -- {total_tp} of {total_present} detected."
         )
     print("=" * 80 + "\n")
 
