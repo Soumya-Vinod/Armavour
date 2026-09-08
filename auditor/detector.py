@@ -241,53 +241,134 @@ def detect_drip_pricing(trace: AuditTrace) -> Detection:
 
 
 def _extract_product_identities(steps: list[AuditStep]) -> tuple[list[str], list[str]]:
-    """Extract product names and IDs from a list of steps' DOM and cart states."""
+    """Extract product names and IDs from steps' DOM and cart states.
+
+    Returns (names, ids) using a priority cascade:
+      1. Cart state item names (highest signal — already parsed from cart context)
+      2. data-product / data-id / data-item-id attributes
+      3. Elements with class product-name / item-name / product-title
+      4. <h1> text (usually the product title on product pages)
+      5. <h2> text (fallback, with stopword filtering)
+    """
     attr_id_regex = re.compile(
-        r'(?:data-product|data-id|data-item-id)\s*=\s*["\']([^"\']+)["\']',
+        r'(?:data-product|data-id|data-item-id|data-product-id|data-sku)\s*=\s*["\']([^"\']+)["\']',
         re.IGNORECASE,
     )
-    heading_regex = re.compile(r'<(?:h1|h2)[^>]*>(.*?)</(?:h1|h2)>', re.IGNORECASE | re.DOTALL)
+    h1_regex = re.compile(r'<h1[^>]*>(.*?)</h1>', re.IGNORECASE | re.DOTALL)
+    h2_regex = re.compile(r'<h2[^>]*>(.*?)</h2>', re.IGNORECASE | re.DOTALL)
     class_regex = re.compile(
-        r'<[a-zA-Z0-9]+[^>]*class=["\'][^"\']*(?:product-name|item-name)[^"\']*["\'][^>]*>(.*?)</[a-zA-Z0-9]+>',
+        r'<[a-zA-Z0-9]+[^>]*class=["\'][^"\']*(?:product-name|item-name|product-title)[^"\']*["\'][^>]*>(.*?)</[a-zA-Z0-9]+>',
         re.IGNORECASE | re.DOTALL,
     )
+
+    # Headings that are page chrome, not product names
+    _CHROME_STOPWORDS = {
+        "product", "products", "your order", "order summary", "your booking",
+        "your cart", "cart", "checkout", "shop", "shopping cart", "order",
+        "order details", "payment", "shipping", "billing", "review",
+        "search results", "home", "menu", "navigation", "footer",
+    }
+
+    def _clean_html(raw: str) -> str:
+        clean = re.sub(r'<[^>]+>', ' ', raw).strip()
+        return ' '.join(clean.split())
+
+    def _is_chrome(text: str) -> bool:
+        return text.lower().strip() in _CHROME_STOPWORDS or len(text) < 2
 
     names: list[str] = []
     ids: list[str] = []
 
     for step in steps:
+        # Priority 1: Cart state item names
+        if step.cart_state and step.cart_state.get("items"):
+            for item in step.cart_state["items"]:
+                if isinstance(item, dict) and item.get("name"):
+                    iname = str(item["name"]).strip()
+                    if iname and iname not in names and not _is_chrome(iname):
+                        names.append(iname)
+                elif isinstance(item, str) and item.strip() and item.strip() not in names:
+                    if not _is_chrome(item.strip()):
+                        names.append(item.strip())
+
         dom = step.dom_snapshot or ""
+
+        # Priority 2: data-product / data-id attributes
         for match in attr_id_regex.finditer(dom):
             val = match.group(1).strip()
             if val and val not in ids:
                 ids.append(val)
 
-        for match in heading_regex.finditer(dom):
-            clean = re.sub(r'<[^>]+>', ' ', match.group(1)).strip()
-            clean = ' '.join(clean.split())
-            if clean and clean not in names and len(clean) < 100:
-                names.append(clean)
-
+        # Priority 3: Elements with product-name / item-name class
         for match in class_regex.finditer(dom):
-            clean = re.sub(r'<[^>]+>', ' ', match.group(1)).strip()
-            clean = ' '.join(clean.split())
-            if clean and clean not in names and len(clean) < 100:
+            clean = _clean_html(match.group(1))
+            if clean and clean not in names and len(clean) < 100 and not _is_chrome(clean):
                 names.append(clean)
 
-        if step.cart_state and step.cart_state.get("items"):
-            for item in step.cart_state["items"]:
-                if isinstance(item, dict) and item.get("name"):
-                    iname = str(item["name"]).strip()
-                    if iname and iname not in names:
-                        names.append(iname)
-                elif isinstance(item, str) and item.strip() and item.strip() not in names:
-                    names.append(item.strip())
+        # Priority 4: <h1> text
+        for match in h1_regex.finditer(dom):
+            clean = _clean_html(match.group(1))
+            if clean and clean not in names and len(clean) < 100 and not _is_chrome(clean):
+                names.append(clean)
+
+        # Priority 5: <h2> text (with stricter filtering)
+        for match in h2_regex.finditer(dom):
+            clean = _clean_html(match.group(1))
+            if clean and clean not in names and len(clean) < 100 and not _is_chrome(clean):
+                names.append(clean)
 
     return names, ids
 
 
+def _extract_item_prices(step: AuditStep) -> list[tuple[str, float]]:
+    """Extract (name, price) pairs from a step's cart state and DOM.
+
+    Returns per-item prices, not totals. This is critical for bait-and-switch
+    where the total may not change but the item does.
+    """
+    pairs: list[tuple[str, float]] = []
+
+    # From cart state items
+    if step.cart_state and step.cart_state.get("items"):
+        for item in step.cart_state["items"]:
+            if isinstance(item, dict) and item.get("name") and item.get("price") is not None:
+                pairs.append((str(item["name"]).strip(), float(item["price"])))
+
+    # Fallback: inline DOM price extraction near product-like text
+    if not pairs and step.dom_snapshot:
+        price_re = re.compile(
+            r'(?:₹|Rs\.?|INR|\$|€|£|¥)\s*(\d+(?:,\d+)*(?:\.\d+)?)',
+            re.IGNORECASE,
+        )
+        for m in price_re.finditer(step.dom_snapshot):
+            try:
+                val = float(m.group(1).replace(',', ''))
+                if val > 0:
+                    # Use a context window around the price to get an approximate name
+                    start = max(0, m.start() - 200)
+                    context = step.dom_snapshot[start:m.start()]
+                    # Strip HTML tags from context
+                    context_text = re.sub(r'<[^>]+>', ' ', context).strip()
+                    # Take the last meaningful phrase before the price
+                    parts = [p.strip() for p in context_text.split('\n') if p.strip()]
+                    name = parts[-1] if parts else ""
+                    if name and len(name) < 100:
+                        pairs.append((name, val))
+                        break  # take only the first price found in DOM fallback
+            except (ValueError, IndexError):
+                continue
+
+    return pairs
+
+
 def detect_bait_and_switch(trace: AuditTrace) -> Detection:
-    """Compare product/price shown on listing (steps 0-2) vs checkout (last 3 steps)."""
+    """Detect product substitution by comparing first-seen vs last-seen product identity.
+
+    Bait-and-switch is an information asymmetry attack: the site shows product A
+    at listing and substitutes product B at checkout. We detect this by finding
+    the first and last steps in the trace that contain product signals, and
+    comparing their identities.
+    """
     if len(trace.steps) < 2:
         return Detection(
             pattern="bait_and_switch",
@@ -298,58 +379,102 @@ def detect_bait_and_switch(trace: AuditTrace) -> Detection:
             detection_method="deterministic",
         )
 
-    listing_steps = trace.steps[: min(3, len(trace.steps))]
-    checkout_steps = trace.steps[max(0, len(trace.steps) - 3) :]
+    # ── Find first and last steps with product signals ──
+    # Instead of fixed windows (first 3 / last 3) which overlap in short traces,
+    # scan all steps and find the earliest and latest with a product identity.
 
-    list_names, list_ids = _extract_product_identities(listing_steps)
-    check_names, check_ids = _extract_product_identities(checkout_steps)
+    first_product_step = None
+    last_product_step = None
+
+    for step in trace.steps:
+        names, ids = _extract_product_identities([step])
+        prices = _extract_item_prices(step)
+        has_signal = bool(names or ids or prices)
+
+        if has_signal and first_product_step is None:
+            first_product_step = step
+        if has_signal:
+            last_product_step = step
+
+    # Need two distinct steps with product info to compare
+    if first_product_step is None or last_product_step is None:
+        return Detection(
+            pattern="bait_and_switch",
+            detected=False,
+            confidence="low",
+            evidence="Could not extract product identity from any step in the trace",
+            step_index=0,
+            detection_method="deterministic",
+        )
+
+    if first_product_step.step_index == last_product_step.step_index:
+        return Detection(
+            pattern="bait_and_switch",
+            detected=False,
+            confidence="medium",
+            evidence="Product identity found in only one step; no transition to compare",
+            step_index=0,
+            detection_method="deterministic",
+        )
+
+    first_names, first_ids = _extract_product_identities([first_product_step])
+    last_names, last_ids = _extract_product_identities([last_product_step])
 
     # Check 1: Product ID changed
-    if list_ids and check_ids and list_ids[0] != check_ids[0]:
+    if first_ids and last_ids and first_ids[0] != last_ids[0]:
         return Detection(
             pattern="bait_and_switch",
             detected=True,
             confidence="high",
-            evidence=f"Product shown as {list_ids[0]} at listing, {check_ids[0]} at checkout.",
-            step_index=checkout_steps[-1].step_index,
+            evidence=f"Product ID changed from '{first_ids[0]}' (step {first_product_step.step_index}) to '{last_ids[0]}' (step {last_product_step.step_index}).",
+            step_index=last_product_step.step_index,
             detection_method="deterministic",
         )
 
-    # Check 2: Product Name changed
-    if list_names and check_names and list_names[0].lower() != check_names[0].lower():
+    # Check 2: Product name changed
+    if first_names and last_names and first_names[0].lower() != last_names[0].lower():
         return Detection(
             pattern="bait_and_switch",
             detected=True,
             confidence="high",
-            evidence=f"Product shown as {list_names[0]} at listing, {check_names[0]} at checkout.",
-            step_index=checkout_steps[-1].step_index,
+            evidence=f"Product changed from '{first_names[0]}' (step {first_product_step.step_index}) to '{last_names[0]}' (step {last_product_step.step_index}).",
+            step_index=last_product_step.step_index,
             detection_method="deterministic",
         )
 
-    # Check 3: Numeric price changed
-    listing_prices = [
-        s.cart_state.get("total")
-        for s in listing_steps
-        if s.cart_state and s.cart_state.get("total") is not None
-    ]
-    checkout_prices = [
-        s.cart_state.get("total")
-        for s in checkout_steps
-        if s.cart_state and s.cart_state.get("total") is not None
-    ]
+    # Check 3: Per-item price changed (not total — total can change due to fees/add-ons)
+    first_prices = _extract_item_prices(first_product_step)
+    last_prices = _extract_item_prices(last_product_step)
 
-    if listing_prices and checkout_prices:
-        p_list = listing_prices[0]
-        p_check = checkout_prices[-1]
-        if abs(p_list - p_check) > 0.01:
-            p_list_val = int(p_list) if isinstance(p_list, (int, float)) and float(p_list).is_integer() else p_list
-            p_check_val = int(p_check) if isinstance(p_check, (int, float)) and float(p_check).is_integer() else p_check
+    if first_prices and last_prices:
+        _, p_first = first_prices[0]
+        last_name, p_last = last_prices[0]
+        if abs(p_first - p_last) > 0.01:
+            p_first_val = int(p_first) if float(p_first).is_integer() else p_first
+            p_last_val = int(p_last) if float(p_last).is_integer() else p_last
             return Detection(
                 pattern="bait_and_switch",
                 detected=True,
                 confidence="medium",
-                evidence=f"Price shown as Rs {p_list_val} at listing, Rs {p_check_val} at checkout.",
-                step_index=checkout_steps[-1].step_index,
+                evidence=f"Item price changed from Rs {p_first_val} (step {first_product_step.step_index}) to Rs {p_last_val} (step {last_product_step.step_index}).",
+                step_index=last_product_step.step_index,
+                detection_method="deterministic",
+            )
+
+    # Check 4: Fallback — total price changed (less specific, may overlap with drip_pricing)
+    first_total = (first_product_step.cart_state or {}).get("total")
+    last_total = (last_product_step.cart_state or {}).get("total")
+
+    if first_total is not None and last_total is not None:
+        if abs(float(first_total) - float(last_total)) > 0.01:
+            ft = int(first_total) if isinstance(first_total, (int, float)) and float(first_total).is_integer() else first_total
+            lt = int(last_total) if isinstance(last_total, (int, float)) and float(last_total).is_integer() else last_total
+            return Detection(
+                pattern="bait_and_switch",
+                detected=True,
+                confidence="low",
+                evidence=f"Cart total changed from Rs {ft} (step {first_product_step.step_index}) to Rs {lt} (step {last_product_step.step_index}).",
+                step_index=last_product_step.step_index,
                 detection_method="deterministic",
             )
 
