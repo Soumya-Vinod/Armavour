@@ -629,6 +629,42 @@ def detect_subscription_trap(trace: AuditTrace) -> Detection:
             detection_method="deterministic",
         )
 
+    # 0. Context guard: only run cancellation-friction detector if page looks like a subscription flow
+    subscription_signals = (
+        "subscription",
+        "recurring",
+        "monthly",
+        "annual",
+        "annually",
+        "billing",
+        "auto-renew",
+        "per month",
+        "per year",
+        "/mo",
+        "/yr",
+        "/month",
+        "/year",
+        "membership",
+    )
+    is_subscription_flow = False
+    for step in trace.steps:
+        dom = step.dom_snapshot or ""
+        # Strip script and style content so CSS comments/class names don't produce false signals
+        clean_text = re.sub(r'<(?:style|script)[^>]*>.*?</(?:style|script)>', ' ', dom, flags=re.DOTALL | re.IGNORECASE).lower()
+        if any(sig in clean_text for sig in subscription_signals):
+            is_subscription_flow = True
+            break
+
+    if not is_subscription_flow:
+        return Detection(
+            pattern="subscription_trap",
+            detected=False,
+            confidence="high",
+            evidence="Page context does not indicate a subscription management flow",
+            step_index=0,
+            detection_method="deterministic",
+        )
+
     cancel_keywords = ("cancel", "unsubscribe", "end subscription", "stop subscription")
     cancel_affordance_regex = re.compile(
         r'<(?:button|a|input)[^>]*>[^<]*(?:cancel|unsubscribe|end subscription|stop subscription)[^<]*</(?:button|a)>|'

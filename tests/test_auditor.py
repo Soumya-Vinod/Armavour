@@ -16,6 +16,7 @@ from auditor.detector import (
     detect_disguised_advertisement,
     detect_drip_pricing,
     detect_false_urgency,
+    detect_subscription_trap,
     detect_violations,
 )
 from auditor.field import (
@@ -257,3 +258,61 @@ def test_zero_evaluation_metrics_reporting(capsys: pytest.CaptureFixture[str]) -
     captured = capsys.readouterr().out
     assert "NO EPISODES EVALUATED" in captured
     assert "NO DATA / ERRORED" in captured
+
+
+def test_subscription_trap_context_guard_suppresses_fp_on_non_subscription_pages() -> None:
+    # 4-step e-commerce trace with no cancel button in first 3 steps and a "Cancel order" button
+    steps = [
+        AuditStep(
+            step_index=i,
+            url=f"http://shop.local/step{i}",
+            dom_snapshot=(
+                f"<html><head><style>/* subscription trap styles */</style></head>"
+                f"<body><h1>Product {i}</h1><button>Add to Cart</button></body></html>"
+                if i < 3
+                else "<html><head><style>/* subscription */</style></head><body><button>Cancel order</button></body></html>"
+            ),
+            screenshot=b"img",
+            action_taken={"action": "click"},
+            reasoning=f"Step {i}",
+            cart_state=None,
+            timestamp=datetime.now(timezone.utc),
+        )
+        for i in range(4)
+    ]
+    trace = AuditTrace(
+        site_id="shop_site",
+        url="http://shop.local",
+        timestamp_id="20260909T100000Z",
+        steps=steps,
+    )
+    det = detect_subscription_trap(trace)
+    assert det.detected is False
+    assert "Page context does not indicate a subscription management flow" in det.evidence
+
+
+def test_subscription_trap_detects_in_subscription_flow() -> None:
+    # Subscription page with recurring/monthly signal and excessive cancellation friction (3 cancel steps)
+    steps = [
+        AuditStep(
+            step_index=i,
+            url=f"http://service.local/cancel_step{i}",
+            dom_snapshot=f"<html><body><h1>Manage Subscription</h1><p>Monthly billing: Rs 199/mo</p><button>Cancel subscription</button></body></html>",
+            screenshot=b"img",
+            action_taken={"action": "click"},
+            reasoning=f"Cancel step {i}",
+            cart_state=None,
+            timestamp=datetime.now(timezone.utc),
+        )
+        for i in range(3)
+    ]
+    trace = AuditTrace(
+        site_id="subscription_service",
+        url="http://service.local",
+        timestamp_id="20260909T100000Z",
+        steps=steps,
+    )
+    det = detect_subscription_trap(trace)
+    assert det.detected is True
+    assert "Cancellation required 3 steps" in det.evidence
+
