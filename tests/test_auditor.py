@@ -316,3 +316,58 @@ def test_subscription_trap_detects_in_subscription_flow() -> None:
     assert det.detected is True
     assert "Cancellation required 3 steps" in det.evidence
 
+
+def test_basket_sneaking_distinguishes_substitution_from_sneaked_addition() -> None:
+    # 1. Substitution (bait and switch): count remains 1 (Item A -> Item B). Should NOT flag.
+    step0 = AuditStep(
+        step_index=0,
+        url="http://shop.local/step0",
+        dom_snapshot="<html><body>Product page</body></html>",
+        screenshot=b"img",
+        action_taken={"action": "click", "value": "add-btn"},
+        reasoning="Add product to cart",
+        cart_state={"total": 999.0, "items": [{"name": "Wireless Earbuds (Basic)", "price": 999.0}]},
+        timestamp=datetime.now(timezone.utc),
+    )
+    step1_sub = AuditStep(
+        step_index=1,
+        url="http://shop.local/step1",
+        dom_snapshot="<html><body>Checkout page</body></html>",
+        screenshot=b"img",
+        action_taken={"action": "click"},
+        reasoning="Proceed with purchase",
+        cart_state={"total": 1799.0, "items": [{"name": "Wireless Earbuds (Pro)", "price": 1799.0}]},
+        timestamp=datetime.now(timezone.utc),
+    )
+    trace_sub = AuditTrace(
+        site_id="shop_sub",
+        url="http://shop.local",
+        timestamp_id="20260909T100000Z",
+        steps=[step0, step1_sub],
+    )
+    det_sub = detect_basket_sneaking(trace_sub)
+    assert det_sub.detected is False
+    assert "No unrequested items were added to the cart" in det_sub.evidence
+
+    # 2. Sneaked addition: count grows from 1 to 2 (Item A -> Item A + Mystery Item). Should flag.
+    step1_sneak = AuditStep(
+        step_index=1,
+        url="http://shop.local/step1",
+        dom_snapshot="<html><body>Checkout page</body></html>",
+        screenshot=b"img",
+        action_taken={"action": "click"},
+        reasoning="Proceed with purchase",
+        cart_state={"total": 1049.0, "items": [{"name": "Wireless Earbuds (Basic)", "price": 999.0}, {"name": "Mystery Add-on", "price": 50.0}]},
+        timestamp=datetime.now(timezone.utc),
+    )
+    trace_sneak = AuditTrace(
+        site_id="shop_sneak",
+        url="http://shop.local",
+        timestamp_id="20260909T100000Z",
+        steps=[step0, step1_sneak],
+    )
+    det_sneak = detect_basket_sneaking(trace_sneak)
+    assert det_sneak.detected is True
+    assert "Mystery Add-on" in det_sneak.evidence
+
+

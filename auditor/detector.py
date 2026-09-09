@@ -88,11 +88,14 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
             return item.strip(), None
         return str(item).strip(), None
 
-    step0_cart = trace.steps[0].cart_state or {}
-    step0_items = step0_cart.get("items") or []
+    step0 = next((s for s in trace.steps if s.step_index == 0), trace.steps[0])
+    # Baseline is step 0 (or initial observation step if it already contained cart items)
+    baseline_step = trace.steps[0] if (trace.steps[0].cart_state and trace.steps[0].cart_state.get("items")) else step0
+    baseline_cart = baseline_step.cart_state or {}
+    baseline_items_raw = baseline_cart.get("items") or []
 
-    # 1. Check if step 0 cart already contains a pre-sneaked item (e.g. pre-selected donation)
-    for raw_item in step0_items:
+    # 1. Check if baseline cart already contains a pre-sneaked item (e.g. pre-selected donation)
+    for raw_item in baseline_items_raw:
         name, price = _extract_item_info(raw_item)
         if any(kw in name.lower() for kw in sneaked_keywords):
             price_val = int(price) if isinstance(price, (int, float)) and float(price).is_integer() else price
@@ -101,20 +104,22 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
                 pattern="basket_sneaking",
                 detected=True,
                 confidence="high",
-                evidence=f"Cart gained {name}{price_str} at step 0 without agent action.",
-                step_index=0,
+                evidence=f"Cart gained {name}{price_str} at step {baseline_step.step_index} without agent action.",
+                step_index=baseline_step.step_index,
                 detection_method="deterministic",
             )
 
-    # 2. Baseline comparison: check if subsequent steps gained items not in step 0
+    # 2. Baseline comparison: check if subsequent steps gained items not in baseline
     baseline_items: dict[str, tuple[str, int | float | None]] = {}
-    for raw_item in step0_items:
+    for raw_item in baseline_items_raw:
         name, price = _extract_item_info(raw_item)
         if name:
             baseline_items[name.lower()] = (name, price)
 
-    for i in range(1, len(trace.steps)):
-        step = trace.steps[i]
+    for step in trace.steps:
+        if step.step_index <= baseline_step.step_index:
+            continue
+
         curr_cart = step.cart_state or {}
         curr_items_raw = curr_cart.get("items") or []
 
@@ -123,6 +128,11 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
             name, price = _extract_item_info(raw_item)
             if name:
                 curr_item_map[name.lower()] = (name, price)
+
+        # Only evaluate additions if the cart GREW in item count between baseline and current step.
+        # If cart count is the same or smaller, the change is a substitution/removal, not an addition.
+        if len(curr_item_map) <= len(baseline_items):
+            continue
 
         for name_key, (item_name, item_price) in curr_item_map.items():
             if name_key not in baseline_items:
@@ -139,9 +149,9 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
                     if item_price is not None:
                         val = int(item_price) if isinstance(item_price, (int, float)) and float(item_price).is_integer() else item_price
                         price_str = f"Rs {val}"
-                        evidence = f"Cart gained {item_name} ({price_str}) between step 0 and step {step.step_index} without agent action."
+                        evidence = f"Cart gained {item_name} ({price_str}) between step {baseline_step.step_index} and step {step.step_index} without agent action."
                     else:
-                        evidence = f"Cart gained {item_name} between step 0 and step {step.step_index} without agent action."
+                        evidence = f"Cart gained {item_name} between step {baseline_step.step_index} and step {step.step_index} without agent action."
 
                     return Detection(
                         pattern="basket_sneaking",
