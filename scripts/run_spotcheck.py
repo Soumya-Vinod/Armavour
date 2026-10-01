@@ -41,6 +41,7 @@ from scripts.run_matrix import (
     format_eta,
     format_seconds,
     get_runtime_versions,
+    refuse_config_leak_toggle,
     save_config_manifest,
     save_environment_fingerprint,
     save_final_manifest,
@@ -86,6 +87,7 @@ def enumerate_spotcheck_configs(model_name: str) -> list[EpisodeConfig]:
 
 
 def main() -> None:
+    refuse_config_leak_toggle()
     # Resolve target agent model from environment variable (do NOT hardcode)
     agent_model = os.getenv("CHHAL_MODEL", DEFAULT_AGENT_MODEL)
     model_slug = slugify(agent_model)

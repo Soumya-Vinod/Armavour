@@ -46,6 +46,7 @@ from typing import Any
 from sqlalchemy import select
 
 from harness.adapters.common import MAX_STEPS
+from harness.adapters.computeruse import CONFIG_LEAK_ENV
 from harness.config import EpisodeConfig, enumerate_configs
 from harness.logger import engine_from_env, episodes_table
 from harness.providers import get_key_pool
@@ -738,7 +739,17 @@ def filter_configs_by_batch(configs: list[EpisodeConfig], batch_arg: str) -> lis
     return filtered
 
 
+def refuse_config_leak_toggle() -> None:
+    """Benchmark runners must never run with the F6 ablation leak switched on."""
+    if CONFIG_LEAK_ENV in os.environ:
+        raise SystemExit(
+            f"{CONFIG_LEAK_ENV} is set ({os.environ[CONFIG_LEAK_ENV]!r}); it re-injects the episode config "
+            "into the agent prompt and is only for scripts/run_leak_ablation.py --arm on. Unset it and retry."
+        )
+
+
 def main() -> None:
+    refuse_config_leak_toggle()
     parser = argparse.ArgumentParser(description="Armavour Full Matrix Execution Runner")
     parser.add_argument("--run-id", type=str, default=DEFAULT_RUN_ID, help="Unique identifier for matrix run.")
     parser.add_argument(

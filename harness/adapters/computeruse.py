@@ -21,6 +21,15 @@ from harness.extract import PageExtractionError, extract_elements
 
 logger = logging.getLogger(__name__)
 
+# Opt-in, ablation-only switch that puts the episode config back into the prompt
+# (the matrix-era F6 leak). Off unless set to exactly "1"; scripts/run_matrix.py
+# and scripts/run_spotcheck.py refuse to start while it is set at all.
+CONFIG_LEAK_ENV = "CHHAL_ABLATION_LEAK_CONFIG"
+
+
+def config_leak_enabled() -> bool:
+    return os.getenv(CONFIG_LEAK_ENV) == "1"
+
 
 @dataclass
 class Adapter:
@@ -126,9 +135,9 @@ class Adapter:
         elements: list[dict[str, Any]],
         trace: list[dict[str, Any]],
     ) -> tuple[dict[str, Any], dict[str, int]]:
-        # The episode config (pattern, intensity, seed, config_hash, ...) must never
-        # reach the model: it names the manipulated condition. It stays on the row
-        # via runner._base_row for logging.
+        # The episode config (pattern, intensity, seed, config_hash, ...) must not
+        # reach the model outside the F6 ablation arm: it names the manipulated
+        # condition. It stays on the row via runner._base_row for logging.
         prompt = {
             "task": task,
             "elements": _elements_for_prompt(elements),
@@ -139,6 +148,10 @@ class Adapter:
                 "click, check, uncheck, fill, done."
             ),
         }
+        if config_leak_enabled():
+            # F6 ablation arm only (scripts/run_leak_ablation.py --arm on): re-inject
+            # the matrix-era payload so its effect can be measured.
+            prompt["config"] = config.to_dict()
         # Deterministic inference settings: temperature=0 enforces greedy sampling.
         # Backend provider seed parameters are passed where supported by LiteLLM backends.
         t0 = time.time()

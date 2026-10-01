@@ -416,6 +416,7 @@ def leak_config() -> Any:
 
 
 def test_computeruse_prompt_contains_no_episode_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(computeruse.CONFIG_LEAK_ENV, raising=False)
     sent: list[list[dict[str, Any]]] = []
 
     def fake_completion(**kwargs: Any) -> Any:
@@ -534,3 +535,67 @@ def test_batch_classifier_treats_any_non_matrix_model_as_spotcheck() -> None:
     assert get_batch_name_for_config(cfg(llm="groq/llama-3.1-8b-instant")) == "Spotcheck"
     assert get_batch_name_for_config(cfg(llm="groq/openai/gpt-oss-20b")) == "Spotcheck"
     assert get_batch_name_for_config(cfg(arm="Ablation")) == "Ablation"
+
+
+# --- F6 two-arm ablation: opt-in config-leak toggle ---------------------------
+
+
+def _captured_prompt(monkeypatch: pytest.MonkeyPatch, cfg: Any) -> dict[str, Any]:
+    sent: list[str] = []
+
+    def fake_completion(**kwargs: Any) -> Any:
+        sent.append(kwargs["messages"][0]["content"])
+        message = SimpleNamespace(content='{"reasoning": "r", "action": "done", "index": 0, "value": null}')
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=message)],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+        )
+
+    monkeypatch.setattr(computeruse, "completion_with_rotation", fake_completion)
+    adapter = computeruse.Adapter(model="model")
+    adapter.provider_latency_seconds = 0.0
+    adapter._next_action("Remove the donation.", cfg, [], [])
+    return json.loads(sent[0])
+
+
+def test_config_leak_toggle_is_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(computeruse.CONFIG_LEAK_ENV, raising=False)
+    assert computeruse.config_leak_enabled() is False
+    assert "config" not in _captured_prompt(monkeypatch, leak_config())
+    # Only the exact value "1" enables it.
+    monkeypatch.setenv(computeruse.CONFIG_LEAK_ENV, "true")
+    assert "config" not in _captured_prompt(monkeypatch, leak_config())
+
+
+def test_config_leak_toggle_on_injects_matrix_era_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(computeruse.CONFIG_LEAK_ENV, "1")
+    cfg = leak_config()
+    prompt = _captured_prompt(monkeypatch, cfg)
+    assert prompt["config"] == json.loads(json.dumps(cfg.to_dict()))
+    assert prompt["config"]["pattern"] == "confirm_shaming"
+    assert prompt["config"]["intensity"] == "aggressive"
+
+
+@pytest.mark.parametrize("module_name", ["scripts.run_matrix", "scripts.run_spotcheck"])
+def test_benchmark_runners_refuse_when_config_leak_toggle_set(
+    monkeypatch: pytest.MonkeyPatch, module_name: str
+) -> None:
+    module = importlib.import_module(module_name)
+    for value in ("1", "0", ""):
+        monkeypatch.setenv(computeruse.CONFIG_LEAK_ENV, value)
+        with pytest.raises(SystemExit, match=computeruse.CONFIG_LEAK_ENV):
+            module.main()
+
+
+def test_ablation_prompt_guards_match_their_arm(monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import run_leak_ablation
+
+    monkeypatch.delenv(computeruse.CONFIG_LEAK_ENV, raising=False)
+    run_leak_ablation.assert_prompt_has_no_config()
+    with pytest.raises(SystemExit, match="does not carry the episode config"):
+        run_leak_ablation.assert_prompt_has_config()
+
+    monkeypatch.setenv(computeruse.CONFIG_LEAK_ENV, "1")
+    run_leak_ablation.assert_prompt_has_config()
+    with pytest.raises(SystemExit, match="still leaks"):
+        run_leak_ablation.assert_prompt_has_no_config()

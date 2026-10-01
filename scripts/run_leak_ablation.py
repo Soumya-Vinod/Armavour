@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """
-scripts/run_leak_ablation.py — F6 config-leak ablation (200 episodes).
+scripts/run_leak_ablation.py — F6 config-leak ablation, two arms x 200 episodes.
 
-Re-runs a seed-paired slice of matrix-full-e1e2's E1a arm on the post-fix
-harness, where the episode config (pattern, intensity, seed, config_hash, ...)
-is no longer in the ComputerUse prompt (harness/adapters/computeruse.py).
+Runs a seed-paired slice of matrix-full-e1e2's E1a cells twice on the current
+harness, differing ONLY in whether the episode config (pattern, intensity,
+seed, config_hash, ...) is in the ComputerUse prompt:
 
-  run_id    ablation-noconfig-01
+  --arm off  run_id ablation-noconfig-01  config absent (guard aborts if present)
+  --arm on   run_id ablation-config-01    CHHAL_ABLATION_LEAK_CONFIG=1 re-injects the
+                                          matrix-era "config": to_dict() (guard aborts if absent)
+
+Common to both arms:
   agent     computeruse, groq/llama-3.3-70b-versatile
   cells     10 scored patterns x {control, aggressive} x seeds 0-9 = 200
   language  English UI + English instruction (same as E1a)
@@ -41,6 +45,7 @@ from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlparse
 
+from harness.adapters.computeruse import CONFIG_LEAK_ENV
 from harness.config import EpisodeConfig, enumerate_configs
 from harness.providers import get_key_pool
 from harness.runner import code_sha, run_episode
@@ -61,7 +66,7 @@ from scripts.run_matrix import (
     verify_config_uniqueness,
 )
 
-DEFAULT_RUN_ID = "ablation-noconfig-01"
+ARM_RUN_IDS = {"off": "ablation-noconfig-01", "on": "ablation-config-01"}
 AGENT_MODEL = "groq/llama-3.3-70b-versatile"
 MATRIX_MAX_STEPS = 20
 EXCLUDED_PATTERNS = {"disguised_advertisement", "false_urgency"}  # scripts/analysis.py:79
@@ -103,8 +108,8 @@ def refuse_read_only_database() -> None:
         )
 
 
-def assert_prompt_has_no_config() -> None:
-    """Build one real ComputerUse prompt with a stubbed provider and fail if it leaks the config."""
+def _probe_prompt() -> tuple[str, EpisodeConfig]:
+    """Build one real ComputerUse prompt with a stubbed provider; return its serialized content."""
     from harness.adapters import computeruse
 
     captured: list[str] = []
@@ -123,10 +128,14 @@ def assert_prompt_has_no_config() -> None:
         adapter._next_action("probe task", probe, [], [])
     finally:
         computeruse.completion_with_rotation = original
+    return captured[0], probe
 
+
+def assert_prompt_has_no_config() -> None:
+    """Arm off: fail if any config key or value reaches the prompt."""
+    content, probe = _probe_prompt()
     # Scan the whole serialized prompt, not just top-level keys: the probe has
     # no elements and a neutral task, so none of these can occur legitimately.
-    content = captured[0]
     json.loads(content)
     leaked = [k for k in ("config", "pattern", "intensity", "config_hash", "seed", "task_id") if f'"{k}"' in content]
     leaked += [v for v in (probe.pattern, probe.intensity, probe.config_hash, probe.task_id) if v in content]
@@ -134,20 +143,45 @@ def assert_prompt_has_no_config() -> None:
         raise SystemExit(f"Harness still leaks the episode config into the agent prompt: {leaked}")
 
 
+def assert_prompt_has_config() -> None:
+    """Arm on: fail unless the prompt carries exactly the matrix-era payload "config": to_dict()."""
+    content, probe = _probe_prompt()
+    prompt = json.loads(content)
+    expected = json.loads(json.dumps(probe.to_dict()))
+    if prompt.get("config") != expected:
+        raise SystemExit(
+            f"Config arm requested but the prompt does not carry the episode config "
+            f"(got {prompt.get('config')!r}); is {CONFIG_LEAK_ENV}=1 reaching harness/adapters/computeruse.py?"
+        )
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Armavour F6 config-leak ablation runner (200 episodes)")
-    parser.add_argument("--run-id", type=str, default=DEFAULT_RUN_ID)
+    parser = argparse.ArgumentParser(description="Armavour F6 config-leak ablation runner (200 episodes per arm)")
+    parser.add_argument(
+        "--arm", required=True, choices=sorted(ARM_RUN_IDS),
+        help="off: config absent from the prompt (ablation-noconfig-01); "
+             "on: matrix-era config re-injected (ablation-config-01).",
+    )
+    parser.add_argument("--run-id", type=str, default=None, help="Override the arm's default run_id.")
     parser.add_argument("--dry-run", action="store_true", help="Validate setup and enumerate configs without running.")
     args = parser.parse_args()
 
-    # Same agent model and step budget as E1a, regardless of the shell's .env.
+    # Same agent model and step budget as E1a in both arms, regardless of the shell's .env.
     os.environ["CHHAL_MODEL"] = AGENT_MODEL
     os.environ["CHHAL_MAX_STEPS"] = str(MATRIX_MAX_STEPS)
+    # The arm alone decides the leak switch; a stray shell value cannot flip the off arm.
+    if args.arm == "on":
+        os.environ[CONFIG_LEAK_ENV] = "1"
+    else:
+        os.environ.pop(CONFIG_LEAK_ENV, None)
 
     refuse_read_only_database()
-    assert_prompt_has_no_config()
+    if args.arm == "on":
+        assert_prompt_has_config()
+    else:
+        assert_prompt_has_no_config()
 
-    run_id = args.run_id
+    run_id = args.run_id or ARM_RUN_IDS[args.arm]
     results_dir = Path("results")
     results_dir.mkdir(parents=True, exist_ok=True)
     Path(".checkpoints").mkdir(parents=True, exist_ok=True)
@@ -177,7 +211,9 @@ def main() -> None:
     logger.info(f"Judge Model:          {os.getenv('CHHAL_JUDGE_MODEL', 'groq/openai/gpt-oss-120b')}")
     logger.info(f"Max Steps:            {MATRIX_MAX_STEPS}")
     logger.info(f"Provider:             Groq (key {pool.current_index() + 1}/{pool.total_keys()} active)")
-    logger.info("Prompt leak guard:    PASSED (no config in ComputerUse prompt)")
+    logger.info(f"Arm:                  {args.arm}")
+    logger.info("Prompt leak guard:    PASSED ("
+                + ("matrix-era config present" if args.arm == "on" else "no config in ComputerUse prompt") + ")")
     logger.info(f"Total Configurations: {total_configs}")
     logger.info(f"Already Completed:    {skipped_count}")
     logger.info(f"Remaining:            {len(remaining_configs)}")
@@ -198,7 +234,7 @@ def main() -> None:
         elapsed_s = time.time() - start_time
         logger.info("=" * 80)
         logger.info(f"RUN INTERRUPTED -- completed {skipped_count + len(executed_rows)}/{total_configs}")
-        logger.info(f"Resume Command: python scripts/run_leak_ablation.py --run-id {run_id}")
+        logger.info(f"Resume Command: python scripts/run_leak_ablation.py --arm {args.arm} --run-id {run_id}")
         logger.info("=" * 80)
         export_summary_files(run_id, results_dir, executed_rows, skipped_count, total_configs, start_time)
         save_final_manifest(
