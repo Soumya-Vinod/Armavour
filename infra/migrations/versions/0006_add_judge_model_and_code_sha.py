@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0006_add_judge_model_and_code_sha"
+revision = "0006_judge_model_code_sha"
 down_revision = "0005_add_instruction_language"
 branch_labels = None
 depends_on = None

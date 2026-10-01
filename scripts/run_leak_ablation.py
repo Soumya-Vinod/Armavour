@@ -11,15 +11,18 @@ seed, config_hash, ...) is in the ComputerUse prompt:
                                           matrix-era "config": to_dict() (guard aborts if absent)
 
 Common to both arms:
-  agent     computeruse, groq/llama-3.3-70b-versatile
+  agent     computeruse, --agent-model (default groq/qwen/qwen3.8-27b; the matrix's
+            llama-3.3-70b-versatile is retired). Both arms must use the same model;
+            the runner refuses to mix models across or within the ablation run_ids.
   cells     10 scored patterns x {control, aggressive} x seeds 0-9 = 200
   language  English UI + English instruction (same as E1a)
   steps     20 (CHHAL_MAX_STEPS; E1a ran under the harness default of 20 --
             scripts/run_matrix.py had no --max-steps option at a2f4ef7)
 
-The configs are byte-identical EpisodeConfigs to the matrix's E1a cells, so
-each ablation row shares its config_hash with its matrix-full-e1e2 partner
-(scripts/analyze_ablation.py pairs on that). Resumable and idempotent like the
+The configs are the matrix's E1a cells with the agent model swapped in, so the
+two arms share config_hashes and pair on them (scripts/analyze_ablation.py).
+With a model other than llama-3.3-70b-versatile they no longer match the
+matrix's hashes, and the matrix comparison is skipped. Resumable and idempotent like the
 matrix: configs already completed under this run_id are skipped, and
 harness/logger.py upserts on (config_hash, run_id).
 
@@ -67,7 +70,9 @@ from scripts.run_matrix import (
 )
 
 ARM_RUN_IDS = {"off": "ablation-noconfig-01", "on": "ablation-config-01"}
-AGENT_MODEL = "groq/llama-3.3-70b-versatile"
+# groq/llama-3.3-70b-versatile (the matrix agent) has been retired by Groq
+# (model_not_found), so both arms default to a current model.
+DEFAULT_AGENT_MODEL = "groq/qwen/qwen3.8-27b"
 MATRIX_MAX_STEPS = 20
 EXCLUDED_PATTERNS = {"disguised_advertisement", "false_urgency"}  # scripts/analysis.py:79
 INTENSITIES = ["control", "aggressive"]
@@ -75,7 +80,7 @@ READ_ONLY_DATABASES = {"armavour_audit"}
 REPORT_EVERY_EPISODES = 25
 
 
-def enumerate_ablation_configs() -> list[EpisodeConfig]:
+def enumerate_ablation_configs(agent_model: str = DEFAULT_AGENT_MODEL) -> list[EpisodeConfig]:
     """The E1a configs (scripts/run_matrix.py batch 1) restricted to the ablation cells."""
     configs: list[EpisodeConfig] = []
     for pattern, task_id in PATTERN_TASKS.items():
@@ -90,7 +95,7 @@ def enumerate_ablation_configs() -> list[EpisodeConfig]:
                 ui_languages=["en"],
                 instruction_languages=["en"],
                 agents=["computeruse"],
-                llms=[AGENT_MODEL],
+                llms=[agent_model],
                 repeat_count=10,
                 seed_start=0,
             )
@@ -108,7 +113,7 @@ def refuse_read_only_database() -> None:
         )
 
 
-def _probe_prompt() -> tuple[str, EpisodeConfig]:
+def _probe_prompt(agent_model: str = DEFAULT_AGENT_MODEL) -> tuple[str, EpisodeConfig]:
     """Build one real ComputerUse prompt with a stubbed provider; return its serialized content."""
     from harness.adapters import computeruse
 
@@ -119,7 +124,7 @@ def _probe_prompt() -> tuple[str, EpisodeConfig]:
         message = SimpleNamespace(content='{"reasoning": "", "action": "done", "index": 0, "value": null}')
         return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
 
-    probe = enumerate_ablation_configs()[-1]
+    probe = enumerate_ablation_configs(agent_model)[-1]
     original = computeruse.completion_with_rotation
     computeruse.completion_with_rotation = fake_completion
     try:
@@ -131,9 +136,9 @@ def _probe_prompt() -> tuple[str, EpisodeConfig]:
     return captured[0], probe
 
 
-def assert_prompt_has_no_config() -> None:
+def assert_prompt_has_no_config(agent_model: str = DEFAULT_AGENT_MODEL) -> None:
     """Arm off: fail if any config key or value reaches the prompt."""
-    content, probe = _probe_prompt()
+    content, probe = _probe_prompt(agent_model)
     # Scan the whole serialized prompt, not just top-level keys: the probe has
     # no elements and a neutral task, so none of these can occur legitimately.
     json.loads(content)
@@ -143,15 +148,39 @@ def assert_prompt_has_no_config() -> None:
         raise SystemExit(f"Harness still leaks the episode config into the agent prompt: {leaked}")
 
 
-def assert_prompt_has_config() -> None:
+def assert_prompt_has_config(agent_model: str = DEFAULT_AGENT_MODEL) -> None:
     """Arm on: fail unless the prompt carries exactly the matrix-era payload "config": to_dict()."""
-    content, probe = _probe_prompt()
+    content, probe = _probe_prompt(agent_model)
     prompt = json.loads(content)
     expected = json.loads(json.dumps(probe.to_dict()))
     if prompt.get("config") != expected:
         raise SystemExit(
             f"Config arm requested but the prompt does not carry the episode config "
             f"(got {prompt.get('config')!r}); is {CONFIG_LEAK_ENV}=1 reaching harness/adapters/computeruse.py?"
+        )
+
+
+def refuse_mixed_models(run_id: str, agent_model: str, *, engine: Any = None) -> None:
+    """Refuse to start if this run_id or either arm's run_id already holds rows from another llm.
+
+    The two arms are only comparable if they ran the same model; a resumed arm
+    must not mix models either.
+    """
+    from sqlalchemy import select
+
+    from harness.logger import engine_from_env, episodes_table
+
+    engine = engine or engine_from_env()
+    table = episodes_table(engine)
+    run_ids = sorted({run_id, *ARM_RUN_IDS.values()})
+    stmt = select(table.c.run_id, table.c.llm).where(table.c.run_id.in_(run_ids)).distinct()
+    with engine.connect() as conn:
+        found = [(r, m) for r, m in conn.execute(stmt).all() if m != agent_model]
+    if found:
+        detail = ", ".join(f"{r}: {m}" for r, m in sorted(found))
+        raise SystemExit(
+            f"Refusing to start: --agent-model is {agent_model!r} but existing ablation rows use another model "
+            f"({detail}). Both arms must run the same model; use a new database or matching --agent-model."
         )
 
 
@@ -163,11 +192,15 @@ def main() -> None:
              "on: matrix-era config re-injected (ablation-config-01).",
     )
     parser.add_argument("--run-id", type=str, default=None, help="Override the arm's default run_id.")
+    parser.add_argument(
+        "--agent-model", type=str, default=DEFAULT_AGENT_MODEL,
+        help=f"LiteLLM agent model for this arm (default {DEFAULT_AGENT_MODEL}); both arms must match.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Validate setup and enumerate configs without running.")
     args = parser.parse_args()
 
-    # Same agent model and step budget as E1a in both arms, regardless of the shell's .env.
-    os.environ["CHHAL_MODEL"] = AGENT_MODEL
+    # Same agent model in both arms and the E1a step budget, regardless of the shell's .env.
+    os.environ["CHHAL_MODEL"] = args.agent_model
     os.environ["CHHAL_MAX_STEPS"] = str(MATRIX_MAX_STEPS)
     # The arm alone decides the leak switch; a stray shell value cannot flip the off arm.
     if args.arm == "on":
@@ -177,9 +210,9 @@ def main() -> None:
 
     refuse_read_only_database()
     if args.arm == "on":
-        assert_prompt_has_config()
+        assert_prompt_has_config(args.agent_model)
     else:
-        assert_prompt_has_no_config()
+        assert_prompt_has_no_config(args.agent_model)
 
     run_id = args.run_id or ARM_RUN_IDS[args.arm]
     results_dir = Path("results")
@@ -191,8 +224,9 @@ def main() -> None:
     pool = get_key_pool("groq")
 
     validate_dependencies(logger)
+    refuse_mixed_models(run_id, args.agent_model)
 
-    configs = enumerate_ablation_configs()
+    configs = enumerate_ablation_configs(args.agent_model)
     total_configs = len(configs)
     verify_config_uniqueness(logger, configs)
     config_manifest_path = save_config_manifest(run_id, results_dir, configs)
@@ -207,7 +241,7 @@ def main() -> None:
     logger.info(f"Run ID:               {run_id}")
     logger.info(f"Timestamp:            {datetime.datetime.now(datetime.timezone.utc).isoformat()}")
     logger.info(f"Code SHA:             {code_sha()}")
-    logger.info(f"Agent Model:          {AGENT_MODEL}")
+    logger.info(f"Agent Model:          {args.agent_model}")
     logger.info(f"Judge Model:          {os.getenv('CHHAL_JUDGE_MODEL', 'groq/openai/gpt-oss-120b')}")
     logger.info(f"Max Steps:            {MATRIX_MAX_STEPS}")
     logger.info(f"Provider:             Groq (key {pool.current_index() + 1}/{pool.total_keys()} active)")

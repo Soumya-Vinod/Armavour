@@ -9,7 +9,9 @@ configs and seeds; the only difference is the config block in the prompt.
 SECONDARY: ablation-noconfig-01 vs matrix-full-e1e2 E1a. This is a
 REPLICATION ACROSS CODE VERSIONS, NOT AN F6 TEST: besides the config, the
 harness, evaluator, prompt labels and testbed ids changed between them
-(SPRINT_REPORT.md §5.1).
+(SPRINT_REPORT.md §5.1). It is SKIPPED when the ablation's agent model differs
+from the matrix's (llama-3.3-70b-versatile is retired, so with the default
+qwen agent it is always skipped).
 
 Also reported: per-pattern DC for confirm_shaming and interface_interference
 in the noconfig arm -- a clean measurement with opaque ids and no config.
@@ -151,6 +153,26 @@ def cs_ii_table(noconfig: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def run_models(df: pd.DataFrame) -> list[str]:
+    return sorted(df["llm"].dropna().unique().tolist()) if not df.empty else []
+
+
+def secondary_skip_reason(noconfig: pd.DataFrame, matrix_e1a: pd.DataFrame) -> str | None:
+    """The matrix replication is only meaningful with the matrix's own agent model.
+
+    `matrix_e1a` is the matrix restricted to the noconfig arm's config_hashes; the
+    hash includes the llm, so a different ablation model leaves it empty.
+    """
+    ablation_models, matrix_models = run_models(noconfig), run_models(matrix_e1a)
+    if matrix_e1a.empty or ablation_models != matrix_models:
+        return (
+            f"models differ (ablation {ablation_models} vs matrix E1a "
+            f"{matrix_models or ['groq/llama-3.3-70b-versatile, no matching config_hash']}); "
+            "a matrix-vs-ablation comparison is not meaningful."
+        )
+    return None
+
+
 def report(title: str, ref_label: str, test_label: str, paired: pd.DataFrame, info: dict[str, int],
            out_dir: Path, slug: str) -> None:
     table = mcnemar_table(paired)
@@ -185,6 +207,16 @@ def main() -> None:
     matrix = load_run(args.matrix_db_url, MATRIX_RUN_ID)
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
+    matrix_e1a = matrix[matrix["config_hash"].isin(set(noconfig["config_hash"]))]
+    print("Agent models (llm) per run:")
+    print(f"  {args.config_run_id:<24} {run_models(config) or ['(no rows)']}")
+    print(f"  {args.noconfig_run_id:<24} {run_models(noconfig)}")
+    print(f"  {MATRIX_RUN_ID + ' E1a':<24} "
+          f"{run_models(matrix_e1a) or ['groq/llama-3.3-70b-versatile (no rows share these config_hashes)']}")
+    print()
+    if not config.empty and run_models(config) != run_models(noconfig):
+        raise SystemExit("PRIMARY invalid: the two ablation arms used different agent models.")
+
     if config.empty:
         print(f"PRIMARY skipped: no rows for {args.config_run_id!r} yet.\n")
     else:
@@ -192,9 +224,14 @@ def main() -> None:
         report("PRIMARY (F6 test): config arm vs noconfig arm, same harness",
                args.config_run_id, args.noconfig_run_id, paired, info, args.out_dir, "primary_config_vs_noconfig")
 
-    paired, info = pair_runs(matrix, noconfig)
-    report("SECONDARY: replication across code versions, NOT an F6 test",
-           f"{MATRIX_RUN_ID} E1a", args.noconfig_run_id, paired, info, args.out_dir, "secondary_matrix_vs_noconfig")
+    skip_reason = secondary_skip_reason(noconfig, matrix_e1a)
+    if skip_reason:
+        print("=" * 100)
+        print(f"SECONDARY skipped: {skip_reason}\n")
+    else:
+        paired, info = pair_runs(matrix, noconfig)
+        report("SECONDARY: replication across code versions, NOT an F6 test",
+               f"{MATRIX_RUN_ID} E1a", args.noconfig_run_id, paired, info, args.out_dir, "secondary_matrix_vs_noconfig")
 
     cs_ii = cs_ii_table(noconfig)
     cs_ii.to_csv(args.out_dir / "cs_ii_noconfig.csv", index=False)

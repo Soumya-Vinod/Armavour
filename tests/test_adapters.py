@@ -599,3 +599,100 @@ def test_ablation_prompt_guards_match_their_arm(monkeypatch: pytest.MonkeyPatch)
     run_leak_ablation.assert_prompt_has_config()
     with pytest.raises(SystemExit, match="still leaks"):
         run_leak_ablation.assert_prompt_has_no_config()
+
+
+# --- Qwen agent compatibility and ablation model consistency -------------------
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ('<think>Click Remove {draft}</think>\n{"reasoning": "r", "action": "click", "index": 1}', {"reasoning": "r", "action": "click", "index": 1}),
+        ('<THINKING>\nplan\n</THINKING>{"action": "done", "index": 0}', {"action": "done", "index": 0}),
+        ('reasoning without an opening tag {x}</think>\n{"action": "done", "index": 0}', {"action": "done", "index": 0}),
+        ('<think>plan</think>\n```json\n{"action": "done"}\n```', {"action": "done"}),
+        ('{"reasoning": "label reads </think> oddly", "action": "done"}', {"reasoning": "label reads </think> oddly", "action": "done"}),
+    ],
+)
+def test_parse_action_json_strips_reasoning_blocks(raw: str, expected: dict[str, Any]) -> None:
+    assert computeruse._parse_action_json(raw) == expected
+
+
+def _capture_completion_kwargs(monkeypatch: pytest.MonkeyPatch, model: str, fail_with: list[str] | None = None) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
+    failures = list(fail_with or [])
+
+    def fake_completion(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        if failures:
+            raise RuntimeError(failures.pop(0))
+        message = SimpleNamespace(content='<think>x</think>{"reasoning": "r", "action": "done", "index": 0}')
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1))
+
+    monkeypatch.setattr(computeruse, "completion_with_rotation", fake_completion)
+    monkeypatch.delenv("CHHAL_MAX_TOKENS", raising=False)
+    adapter = computeruse.Adapter(model=model)
+    adapter.provider_latency_seconds = 0.0
+    action, _ = adapter._next_action("task", leak_config(), [], [])
+    assert action["action"] == "done"
+    return calls
+
+
+def test_qwen_requests_disable_thinking_with_large_token_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _capture_completion_kwargs(monkeypatch, "groq/qwen/qwen3.8-27b")
+    assert len(calls) == 1
+    assert calls[0]["extra_body"] == {"reasoning_effort": "none", "reasoning_format": "hidden"}
+    assert calls[0]["max_tokens"] == computeruse.QWEN_DEFAULT_MAX_TOKENS
+    assert calls[0]["response_format"] == {"type": "json_object"}
+
+
+def test_non_qwen_requests_are_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _capture_completion_kwargs(monkeypatch, "groq/openai/gpt-oss-20b")
+    assert len(calls) == 1
+    assert "extra_body" not in calls[0]
+    assert calls[0]["max_tokens"] == 2048
+
+
+def test_qwen_falls_back_when_groq_rejects_a_reasoning_param(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _capture_completion_kwargs(
+        monkeypatch, "groq/qwen/qwen3.8-27b", fail_with=["400 invalid value for reasoning_effort"]
+    )
+    assert [c.get("extra_body") for c in calls] == [
+        {"reasoning_effort": "none", "reasoning_format": "hidden"},
+        {"reasoning_format": "hidden"},
+    ]
+
+
+def test_ablation_refuses_to_mix_agent_models(tmp_path: Any) -> None:
+    import sqlalchemy as sa
+
+    from scripts import run_leak_ablation
+
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'abl.db'}")
+    meta = sa.MetaData()
+    episodes = sa.Table("episodes", meta, sa.Column("id", sa.Integer, primary_key=True),
+                        sa.Column("run_id", sa.String), sa.Column("llm", sa.String))
+    meta.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(episodes.insert(), [{"run_id": "ablation-noconfig-01", "llm": "groq/qwen/qwen3.8-27b"}])
+
+    # Same model as the existing arm: allowed (both for the other arm and for resuming).
+    run_leak_ablation.refuse_mixed_models("ablation-config-01", "groq/qwen/qwen3.8-27b", engine=engine)
+    run_leak_ablation.refuse_mixed_models("ablation-noconfig-01", "groq/qwen/qwen3.8-27b", engine=engine)
+    # Different model for the other arm: refused.
+    with pytest.raises(SystemExit, match="ablation-noconfig-01: groq/qwen/qwen3.8-27b"):
+        run_leak_ablation.refuse_mixed_models("ablation-config-01", "groq/openai/gpt-oss-20b", engine=engine)
+
+
+def test_analysis_skips_matrix_replication_on_model_mismatch() -> None:
+    import pandas as pd
+
+    from scripts import analyze_ablation
+
+    qwen = pd.DataFrame({"config_hash": ["h1"], "llm": ["groq/qwen/qwen3.8-27b"]})
+    llama = pd.DataFrame({"config_hash": ["h1"], "llm": ["groq/llama-3.3-70b-versatile"]})
+    no_rows = llama.iloc[0:0]
+
+    assert "models differ" in analyze_ablation.secondary_skip_reason(qwen, llama)
+    assert "models differ" in analyze_ablation.secondary_skip_reason(qwen, no_rows)
+    assert analyze_ablation.secondary_skip_reason(llama, llama) is None

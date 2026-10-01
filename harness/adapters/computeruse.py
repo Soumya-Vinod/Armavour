@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -29,6 +30,38 @@ CONFIG_LEAK_ENV = "CHHAL_ABLATION_LEAK_CONFIG"
 
 def config_leak_enabled() -> bool:
     return os.getenv(CONFIG_LEAK_ENV) == "1"
+
+
+DEFAULT_MAX_TOKENS = 2048
+# Qwen3-family models think before answering; leave room so reasoning cannot
+# exhaust the budget before the JSON action is emitted.
+QWEN_DEFAULT_MAX_TOKENS = 8192
+# Groq-native reasoning controls for qwen models, most to least restrictive.
+# reasoning_effort "none" disables thinking; reasoning_format "hidden" drops it
+# from the response (Groq rejects "raw" with JSON mode).
+QWEN_REASONING_FALLBACKS: tuple[dict[str, str], ...] = (
+    {"reasoning_effort": "none", "reasoning_format": "hidden"},
+    {"reasoning_format": "hidden"},
+    {},
+)
+# <think>...</think> and similar reasoning blocks some models emit before the JSON.
+_REASONING_BLOCK_RE = re.compile(r"<(think|thinking|reasoning)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+_DANGLING_REASONING_CLOSE_RE = re.compile(r"^.*?</(think|thinking|reasoning)\s*>", re.IGNORECASE | re.DOTALL)
+
+
+def _is_qwen_model(model: str | None) -> bool:
+    return "qwen" in (model or "").lower()
+
+
+def _strip_reasoning_blocks(text: str) -> str:
+    """Remove <think>-style blocks; also a leading block whose opening tag was omitted."""
+    text = _REASONING_BLOCK_RE.sub("", text)
+    dangling = _DANGLING_REASONING_CLOSE_RE.match(text)
+    # Only treat it as a reasoning prefix if what follows is the JSON answer, so a
+    # literal "</think>" inside a JSON string value is never cut.
+    if dangling and text[dangling.end():].lstrip().startswith(("{", "```")):
+        text = text[dangling.end():]
+    return text.strip()
 
 
 @dataclass
@@ -155,32 +188,29 @@ class Adapter:
         # Deterministic inference settings: temperature=0 enforces greedy sampling.
         # Backend provider seed parameters are passed where supported by LiteLLM backends.
         t0 = time.time()
-        max_tokens = int(os.getenv("CHHAL_MAX_TOKENS", "2048"))
+        qwen = _is_qwen_model(self.model)
+        default_max_tokens = QWEN_DEFAULT_MAX_TOKENS if qwen else DEFAULT_MAX_TOKENS
+        max_tokens = int(os.getenv("CHHAL_MAX_TOKENS", str(default_max_tokens)))
         timeout = float(os.getenv("CHHAL_PROVIDER_TIMEOUT_S", str(DEFAULT_PROVIDER_TIMEOUT_S)))
         messages = [{"role": "user", "content": json.dumps(prompt, sort_keys=True)}]
+        base_kwargs = {
+            "model": self.model,
+            "temperature": 0,
+            "max_tokens": max_tokens,
+            "drop_params": True,
+            "timeout": timeout,
+            "messages": messages,
+        }
 
         try:
-            response = completion_with_rotation(
-                model=self.model,
-                temperature=0,
-                max_tokens=max_tokens,
-                response_format={"type": "json_object"},
-                drop_params=True,
-                timeout=timeout,
-                messages=messages,
+            response = self._complete_with_reasoning_fallback(
+                {**base_kwargs, "response_format": {"type": "json_object"}}, qwen=qwen
             )
         except Exception as exc:
             err_msg = str(exc).lower()
             if "json_validate_failed" in err_msg or "failed to validate json" in err_msg:
                 logger.warning("Groq json_validate_failed in computeruse adapter, retrying without response_format: %s", exc)
-                response = completion_with_rotation(
-                    model=self.model,
-                    temperature=0,
-                    max_tokens=max_tokens,
-                    drop_params=True,
-                    timeout=timeout,
-                    messages=messages,
-                )
+                response = self._complete_with_reasoning_fallback(dict(base_kwargs), qwen=qwen)
             else:
                 raise
 
@@ -190,6 +220,30 @@ class Adapter:
         action = _parse_action_json(text)
 
         return action, _usage_tokens(response)
+
+    def _complete_with_reasoning_fallback(self, kwargs: dict[str, Any], *, qwen: bool) -> Any:
+        """Call the provider; for qwen models, first ask Groq to suppress thinking.
+
+        litellm 1.74.9 silently drops a top-level reasoning_effort for groq/
+        (not in GroqChatConfig's supported params, and drop_params=True), so the
+        Groq-native fields go through extra_body, which litellm forwards. If Groq
+        rejects a field for this model, retry without it. Non-qwen models: one
+        plain call, exactly as before.
+        """
+        if not qwen:
+            return completion_with_rotation(**kwargs)
+        last_exc: Exception | None = None
+        for extra_body in QWEN_REASONING_FALLBACKS:
+            call_kwargs = {**kwargs, "extra_body": dict(extra_body)} if extra_body else dict(kwargs)
+            try:
+                return completion_with_rotation(**call_kwargs)
+            except Exception as exc:
+                message = str(exc).lower()
+                if not extra_body or not any(key in message for key in extra_body):
+                    raise
+                logger.warning("Groq rejected %s for %s; retrying with fewer reasoning params: %s", extra_body, self.model, exc)
+                last_exc = exc
+        raise last_exc  # pragma: no cover - the final fallback has no extra_body and raises above
 
     def _execute(self, action: dict[str, Any], handle_map: dict[int, ElementHandle]) -> None:
         action_name = action.get("action")
@@ -265,7 +319,8 @@ def _response_text(response: Any) -> str:
 
 
 def _parse_action_json(raw: str) -> dict[str, Any]:
-    stripped = raw.strip()
+    # No-op unless the output contains reasoning tags (qwen3-style thinking).
+    stripped = _strip_reasoning_blocks(raw.strip())
     # Strip markdown code fence if present
     if stripped.startswith("```"):
         lines = stripped.splitlines()
