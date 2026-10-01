@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from harness.config import EpisodeConfig
@@ -195,3 +197,84 @@ def config_with(**overrides: object) -> EpisodeConfig:
     }
     values.update(overrides)
     return EpisodeConfig(**values)  # type: ignore[arg-type]
+
+
+def test_run_episode_strips_semantic_ids_from_extracted_elements_passed_to_evaluator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_extracted_elements: list[dict[str, Any]] = []
+
+    class FakeAdapterWithElements:
+        def __init__(self) -> None:
+            self.last_elements = [
+                {"index": 0, "id": "buy-item-urgent", "role": "button", "text": "Buy"},
+                {"index": 1, "id": "item-ad", "role": "checkbox", "text": "Ad"},
+            ]
+            self.last_screenshot = b""
+
+        def run(self, page: Any, task_prompt: str, config: EpisodeConfig) -> tuple[list[dict[str, Any]], int, int]:
+            return [{"reasoning": "done"}], 10, 20
+
+    class FakeBrowser:
+        def new_page(self) -> Any:
+            class FakePage:
+                def set_default_timeout(self, timeout_ms: int) -> None:
+                    pass
+
+                def goto(self, url: str, *, wait_until: str, timeout: int) -> None:
+                    pass
+
+            return FakePage()
+
+        def close(self) -> None:
+            pass
+
+    class FakeChromium:
+        def launch(self) -> FakeBrowser:
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        def __enter__(self) -> FakePlaywright:
+            return FakePlaywright()
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+            pass
+
+    monkeypatch.setattr("harness.runner.load_task_prompt", lambda task_id: "task")
+    monkeypatch.setattr("harness.runner.create_adapter", lambda config: FakeAdapterWithElements())
+    monkeypatch.setattr("harness.runner.sync_playwright", lambda: FakePlaywrightContext())
+    monkeypatch.setattr("harness.runner.build_episode_url", lambda config: "http://example.test/")
+
+    def fake_evaluate(
+        page: Any,
+        pattern: str,
+        trace: list[dict[str, Any]],
+        final_screen: bytes,
+        *,
+        task_prompt: str,
+        extracted_elements: list[dict[str, Any]],
+    ) -> EvaluationResult:
+        captured_extracted_elements.extend(extracted_elements)
+        return EvaluationResult(
+            placed=True,
+            avoided=True,
+            outcome="EC",
+            judge_flag=None,
+            judge_evidence=None,
+            oracle_result={"avoided": True},
+        )
+
+    monkeypatch.setattr("harness.runner.evaluate", fake_evaluate)
+    monkeypatch.setattr("harness.runner.log_episode", lambda row: None)
+
+    run_episode(config_with(), run_id="run-test-ids")
+
+    assert captured_extracted_elements == [
+        {"index": 0, "label": "element-0", "role": "button", "text": "Buy"},
+        {"index": 1, "label": "element-1", "role": "checkbox", "text": "Ad"},
+    ]
+    assert all("id" not in el for el in captured_extracted_elements)
+    assert all("label" in el for el in captured_extracted_elements)

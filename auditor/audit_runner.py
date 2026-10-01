@@ -90,10 +90,15 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
     try:
         cart_info = page.evaluate(
             """() => {
+                const PRICE_RE = /(?:₹|Rs\\.?|INR|\\$|€|£|¥)\\s*(\\d+(?:,\\d+)*(?:\\.\\d+)?)/i;
+                const SKIP_TEXT_RE = /^(total|subtotal|order\\s*summary|your\\s*booking|grand\\s*total|amount\\s*due)/i;
+                const ACTION_WORDS = ["do not", "pay more", "decline", "cancel", "remove", "refuse"];
+                const CURRENCY_TOKEN_RE = /[₹$€£¥]|Rs\\.?|INR/i;
+
                 let total = null;
                 let items = [];
 
-                // Attempt to read window.__ARMAVOUR_CART__ if available
+                // ── Pass 0: window.__ARMAVOUR_CART__ (testbed fast-path) ──
                 if (window.__ARMAVOUR_CART__) {
                     const rawCart = window.__ARMAVOUR_CART__;
                     if (rawCart && typeof rawCart === 'object') {
@@ -113,11 +118,41 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                     }
                 }
 
-                // Look for price elements with id/class containing total, subtotal, price
-                const totalElements = Array.from(document.querySelectorAll('#total, .total, .subtotal, [id*="total"], [class*="total"], [id*="subtotal"], [class*="subtotal"]'));
+                // ── Pass 1: JSON-LD structured data (schema.org/Product) ──
+                // Most SEO-compliant sites (Shopify, Amazon, WooCommerce) embed this.
+                try {
+                    const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+                    for (const s of ldScripts) {
+                        let data;
+                        try { data = JSON.parse(s.textContent || ''); } catch(_) { continue; }
+                        const entries = Array.isArray(data) ? data : [data];
+                        for (const entry of entries) {
+                            if (!entry || typeof entry !== 'object') continue;
+                            const typ = (entry['@type'] || '').toLowerCase();
+                            if (typ === 'product' || typ === 'offer') {
+                                const name = entry.name || '';
+                                let price = null;
+                                if (entry.offers && typeof entry.offers === 'object') {
+                                    const o = Array.isArray(entry.offers) ? entry.offers[0] : entry.offers;
+                                    price = parseFloat(o.price) || null;
+                                } else if (entry.price !== undefined) {
+                                    price = parseFloat(entry.price) || null;
+                                }
+                                if (name) items.push({ name: String(name).trim(), price });
+                            }
+                        }
+                    }
+                } catch (_) { /* JSON-LD is best-effort */ }
+
+                // ── Pass 2: Total price from DOM ──
+                const totalElements = Array.from(document.querySelectorAll(
+                    '#total, .total, .subtotal, [id*="total"], [class*="total"], ' +
+                    '[id*="subtotal"], [class*="subtotal"], [class*="grand-total"], ' +
+                    '[class*="amount-due"], [class*="order-total"]'
+                ));
                 for (const el of totalElements) {
                     const text = (el.innerText || '').trim();
-                    const match = text.match(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)(\\d+(?:,\\d+)*(?:\\.\\d+)?)/i);
+                    const match = text.match(PRICE_RE);
                     if (match) {
                         const parsedVal = parseFloat(match[1].replace(/,/g, ''));
                         if (!isNaN(parsedVal) && parsedVal > 0) {
@@ -127,26 +162,34 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                     }
                 }
 
-                // Look for cart containers and item elements
+                // ── Pass 3: Cart items via selector-based scan ──
                 const itemSelectors = [
                     '[data-item]',
                     '[data-product]',
                     '[data-cart-item]',
                     '[data-line-item]',
+                    '[data-testid*="item"]',
                     '.cart-item',
                     '.order-item',
                     '.checkout-item',
                     '.product-item',
+                    '.line-item',
                     '.line',
                     '[class*="cart-item"]',
                     '[class*="order-item"]',
+                    '[class*="line-item"]',
                     '[class*="summary-line"]',
-                    '[class*="line"]',
+                    '[class*="product-row"]',
                     'li',
                     'tr'
                 ];
 
-                const containers = Array.from(document.querySelectorAll('#cart, .cart, #order-summary, .order-summary, aside, [class*="cart"], [class*="summary"]'));
+                const containers = Array.from(document.querySelectorAll(
+                    '#cart, .cart, #order-summary, .order-summary, aside, ' +
+                    '[class*="cart"], [class*="summary"], [class*="basket"], ' +
+                    '[class*="checkout"], [id*="cart"], [id*="basket"], ' +
+                    'form[action*="cart"], form[action*="checkout"]'
+                ));
                 let candidates = [];
 
                 if (containers.length > 0) {
@@ -155,12 +198,37 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                             const found = Array.from(c.querySelectorAll(sel));
                             candidates.push(...found);
                         }
+                        // ── Pass 3b: Price-bearing child heuristic ──
+                        // If selector-based scan found nothing inside this container,
+                        // try all direct children that contain a currency token.
+                        // An element inside a cart region with a price is almost
+                        // certainly an item row, regardless of tag/class.
+                        if (candidates.length === 0) {
+                            for (const child of c.children) {
+                                const childText = (child.innerText || '').trim();
+                                if (childText && CURRENCY_TOKEN_RE.test(childText)) {
+                                    candidates.push(child);
+                                }
+                            }
+                        }
                     }
                 } else {
-                    for (const sel of ['[data-item]', '[data-product]', '[data-cart-item]', '[data-line-item]', '.cart-item', '[id*="cart-item"]', '.line']) {
+                    for (const sel of [
+                        '[data-item]', '[data-product]', '[data-cart-item]',
+                        '[data-line-item]', '.cart-item', '[id*="cart-item"]',
+                        '.line', '.line-item'
+                    ]) {
                         candidates.push(...Array.from(document.querySelectorAll(sel)));
                     }
                 }
+
+                // Deduplicate candidates by DOM identity
+                const seen = new Set();
+                candidates = candidates.filter(el => {
+                    if (seen.has(el)) return false;
+                    seen.add(el);
+                    return true;
+                });
 
                 const seenNames = new Set();
                 for (const el of candidates) {
@@ -170,12 +238,12 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                     const text = (el.innerText || '').trim();
                     if (!text) continue;
 
-                    if (/^(total|subtotal|order summary|your booking)/i.test(text)) {
+                    if (SKIP_TEXT_RE.test(text)) {
                         continue;
                     }
 
                     let itemPrice = null;
-                    const priceMatch = text.match(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)(\\d+(?:,\\d+)*(?:\\.\\d+)?)/i);
+                    const priceMatch = text.match(PRICE_RE);
                     if (priceMatch) {
                         const pv = parseFloat(priceMatch[1].replace(/,/g, ''));
                         if (!isNaN(pv)) {
@@ -184,7 +252,7 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                     }
 
                     let namePart = text.split('\\n')[0].trim();
-                    namePart = namePart.replace(/(?:(?:₹|Rs\\.?|INR|\\$)\\s*)\\d+(?:,\\d+)*(?:\\.\\d+)?/gi, '').trim();
+                    namePart = namePart.replace(/(?:₹|Rs\\.?|INR|\\$|€|£|¥)\\s*\\d+(?:,\\d+)*(?:\\.\\d+)?/gi, '').trim();
                     namePart = namePart.replace(/^[-:\\s]+|[-:\\s]+$/g, '').trim();
 
                     if (!namePart) {
@@ -192,8 +260,7 @@ def parse_cart_state(page: Page) -> dict[str, Any] | None:
                     }
 
                     const nameKey = namePart.toLowerCase();
-                    const actionWords = ["do not", "pay more", "decline", "cancel", "remove", "refuse"];
-                    if (actionWords.some(w => nameKey.includes(w))) {
+                    if (ACTION_WORDS.some(w => nameKey.includes(w))) {
                         continue;
                     }
                     if (nameKey && !seenNames.has(nameKey) && nameKey !== 'total' && nameKey !== 'subtotal') {
@@ -291,6 +358,33 @@ def run_audit(
             trace.stopped_reason = "error"
             log_audit_end(config.site_id, trace, "error")
             return trace
+
+        # ── Initial observation step ──
+        # Capture the page state BEFORE any agent action.
+        # Critical for bait-and-switch: the substitution happens on the first
+        # user action, so post-action snapshots never see the original listing.
+        # This preserves the "what was advertised" baseline.
+        try:
+            initial_dom = page.content()
+            initial_cart = parse_cart_state(page)
+            try:
+                initial_screenshot = page.screenshot()
+            except Exception:
+                initial_screenshot = b""
+            initial_step = AuditStep(
+                step_index=-1,
+                url=page.url or url,
+                dom_snapshot=initial_dom,
+                screenshot=initial_screenshot,
+                action_taken={"action": "observe"},
+                reasoning="Initial page observation before any agent action",
+                cart_state=initial_cart,
+                timestamp=datetime.now(timezone.utc),
+            )
+            trace.steps.append(initial_step)
+        except Exception as exc:
+            logger.debug("Initial observation step failed (non-fatal): %s", exc)
+
         for step_idx in range(config.max_steps):
             current_url = page.url or url
 

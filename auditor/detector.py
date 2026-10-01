@@ -88,11 +88,14 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
             return item.strip(), None
         return str(item).strip(), None
 
-    step0_cart = trace.steps[0].cart_state or {}
-    step0_items = step0_cart.get("items") or []
+    step0 = next((s for s in trace.steps if s.step_index == 0), trace.steps[0])
+    # Baseline is step 0 (or initial observation step if it already contained cart items)
+    baseline_step = trace.steps[0] if (trace.steps[0].cart_state and trace.steps[0].cart_state.get("items")) else step0
+    baseline_cart = baseline_step.cart_state or {}
+    baseline_items_raw = baseline_cart.get("items") or []
 
-    # 1. Check if step 0 cart already contains a pre-sneaked item (e.g. pre-selected donation)
-    for raw_item in step0_items:
+    # 1. Check if baseline cart already contains a pre-sneaked item (e.g. pre-selected donation)
+    for raw_item in baseline_items_raw:
         name, price = _extract_item_info(raw_item)
         if any(kw in name.lower() for kw in sneaked_keywords):
             price_val = int(price) if isinstance(price, (int, float)) and float(price).is_integer() else price
@@ -101,20 +104,22 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
                 pattern="basket_sneaking",
                 detected=True,
                 confidence="high",
-                evidence=f"Cart gained {name}{price_str} at step 0 without agent action.",
-                step_index=0,
+                evidence=f"Cart gained {name}{price_str} at step {baseline_step.step_index} without agent action.",
+                step_index=baseline_step.step_index,
                 detection_method="deterministic",
             )
 
-    # 2. Baseline comparison: check if subsequent steps gained items not in step 0
+    # 2. Baseline comparison: check if subsequent steps gained items not in baseline
     baseline_items: dict[str, tuple[str, int | float | None]] = {}
-    for raw_item in step0_items:
+    for raw_item in baseline_items_raw:
         name, price = _extract_item_info(raw_item)
         if name:
             baseline_items[name.lower()] = (name, price)
 
-    for i in range(1, len(trace.steps)):
-        step = trace.steps[i]
+    for step in trace.steps:
+        if step.step_index <= baseline_step.step_index:
+            continue
+
         curr_cart = step.cart_state or {}
         curr_items_raw = curr_cart.get("items") or []
 
@@ -123,6 +128,11 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
             name, price = _extract_item_info(raw_item)
             if name:
                 curr_item_map[name.lower()] = (name, price)
+
+        # Only evaluate additions if the cart GREW in item count between baseline and current step.
+        # If cart count is the same or smaller, the change is a substitution/removal, not an addition.
+        if len(curr_item_map) <= len(baseline_items):
+            continue
 
         for name_key, (item_name, item_price) in curr_item_map.items():
             if name_key not in baseline_items:
@@ -139,9 +149,9 @@ def detect_basket_sneaking(trace: AuditTrace) -> Detection:
                     if item_price is not None:
                         val = int(item_price) if isinstance(item_price, (int, float)) and float(item_price).is_integer() else item_price
                         price_str = f"Rs {val}"
-                        evidence = f"Cart gained {item_name} ({price_str}) between step 0 and step {step.step_index} without agent action."
+                        evidence = f"Cart gained {item_name} ({price_str}) between step {baseline_step.step_index} and step {step.step_index} without agent action."
                     else:
-                        evidence = f"Cart gained {item_name} between step 0 and step {step.step_index} without agent action."
+                        evidence = f"Cart gained {item_name} between step {baseline_step.step_index} and step {step.step_index} without agent action."
 
                     return Detection(
                         pattern="basket_sneaking",
@@ -240,8 +250,135 @@ def detect_drip_pricing(trace: AuditTrace) -> Detection:
     )
 
 
+def _extract_product_identities(steps: list[AuditStep]) -> tuple[list[str], list[str]]:
+    """Extract product names and IDs from steps' DOM and cart states.
+
+    Returns (names, ids) using a priority cascade:
+      1. Cart state item names (highest signal — already parsed from cart context)
+      2. data-product / data-id / data-item-id attributes
+      3. Elements with class product-name / item-name / product-title
+      4. <h1> text (usually the product title on product pages)
+      5. <h2> text (fallback, with stopword filtering)
+    """
+    attr_id_regex = re.compile(
+        r'(?:data-product|data-id|data-item-id|data-product-id|data-sku)\s*=\s*["\']([^"\']+)["\']',
+        re.IGNORECASE,
+    )
+    h1_regex = re.compile(r'<h1[^>]*>(.*?)</h1>', re.IGNORECASE | re.DOTALL)
+    h2_regex = re.compile(r'<h2[^>]*>(.*?)</h2>', re.IGNORECASE | re.DOTALL)
+    class_regex = re.compile(
+        r'<[a-zA-Z0-9]+[^>]*class=["\'][^"\']*(?:product-name|item-name|product-title)[^"\']*["\'][^>]*>(.*?)</[a-zA-Z0-9]+>',
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    # Headings that are page chrome, not product names
+    _CHROME_STOPWORDS = {
+        "product", "products", "your order", "order summary", "your booking",
+        "your cart", "cart", "checkout", "shop", "shopping cart", "order",
+        "order details", "payment", "shipping", "billing", "review",
+        "search results", "home", "menu", "navigation", "footer",
+    }
+
+    def _clean_html(raw: str) -> str:
+        clean = re.sub(r'<[^>]+>', ' ', raw).strip()
+        return ' '.join(clean.split())
+
+    def _is_chrome(text: str) -> bool:
+        return text.lower().strip() in _CHROME_STOPWORDS or len(text) < 2
+
+    names: list[str] = []
+    ids: list[str] = []
+
+    for step in steps:
+        # Priority 1: Cart state item names
+        if step.cart_state and step.cart_state.get("items"):
+            for item in step.cart_state["items"]:
+                if isinstance(item, dict) and item.get("name"):
+                    iname = str(item["name"]).strip()
+                    if iname and iname not in names and not _is_chrome(iname):
+                        names.append(iname)
+                elif isinstance(item, str) and item.strip() and item.strip() not in names:
+                    if not _is_chrome(item.strip()):
+                        names.append(item.strip())
+
+        dom = step.dom_snapshot or ""
+
+        # Priority 2: data-product / data-id attributes
+        for match in attr_id_regex.finditer(dom):
+            val = match.group(1).strip()
+            if val and val not in ids:
+                ids.append(val)
+
+        # Priority 3: Elements with product-name / item-name class
+        for match in class_regex.finditer(dom):
+            clean = _clean_html(match.group(1))
+            if clean and clean not in names and len(clean) < 100 and not _is_chrome(clean):
+                names.append(clean)
+
+        # Priority 4: <h1> text
+        for match in h1_regex.finditer(dom):
+            clean = _clean_html(match.group(1))
+            if clean and clean not in names and len(clean) < 100 and not _is_chrome(clean):
+                names.append(clean)
+
+        # Priority 5: <h2> text (with stricter filtering)
+        for match in h2_regex.finditer(dom):
+            clean = _clean_html(match.group(1))
+            if clean and clean not in names and len(clean) < 100 and not _is_chrome(clean):
+                names.append(clean)
+
+    return names, ids
+
+
+def _extract_item_prices(step: AuditStep) -> list[tuple[str, float]]:
+    """Extract (name, price) pairs from a step's cart state and DOM.
+
+    Returns per-item prices, not totals. This is critical for bait-and-switch
+    where the total may not change but the item does.
+    """
+    pairs: list[tuple[str, float]] = []
+
+    # From cart state items
+    if step.cart_state and step.cart_state.get("items"):
+        for item in step.cart_state["items"]:
+            if isinstance(item, dict) and item.get("name") and item.get("price") is not None:
+                pairs.append((str(item["name"]).strip(), float(item["price"])))
+
+    # Fallback: inline DOM price extraction near product-like text
+    if not pairs and step.dom_snapshot:
+        price_re = re.compile(
+            r'(?:₹|Rs\.?|INR|\$|€|£|¥)\s*(\d+(?:,\d+)*(?:\.\d+)?)',
+            re.IGNORECASE,
+        )
+        for m in price_re.finditer(step.dom_snapshot):
+            try:
+                val = float(m.group(1).replace(',', ''))
+                if val > 0:
+                    # Use a context window around the price to get an approximate name
+                    start = max(0, m.start() - 200)
+                    context = step.dom_snapshot[start:m.start()]
+                    # Strip HTML tags from context
+                    context_text = re.sub(r'<[^>]+>', ' ', context).strip()
+                    # Take the last meaningful phrase before the price
+                    parts = [p.strip() for p in context_text.split('\n') if p.strip()]
+                    name = parts[-1] if parts else ""
+                    if name and len(name) < 100:
+                        pairs.append((name, val))
+                        break  # take only the first price found in DOM fallback
+            except (ValueError, IndexError):
+                continue
+
+    return pairs
+
+
 def detect_bait_and_switch(trace: AuditTrace) -> Detection:
-    """Compare product/price shown on listing (steps 0-2) vs checkout (last 3 steps)."""
+    """Detect product substitution by comparing first-seen vs last-seen product identity.
+
+    Bait-and-switch is an information asymmetry attack: the site shows product A
+    at listing and substitutes product B at checkout. We detect this by finding
+    the first and last steps in the trace that contain product signals, and
+    comparing their identities.
+    """
     if len(trace.steps) < 2:
         return Detection(
             pattern="bait_and_switch",
@@ -252,30 +389,102 @@ def detect_bait_and_switch(trace: AuditTrace) -> Detection:
             detection_method="deterministic",
         )
 
-    listing_steps = trace.steps[: min(3, len(trace.steps))]
-    checkout_steps = trace.steps[max(0, len(trace.steps) - 3) :]
+    # ── Find first and last steps with product signals ──
+    # Instead of fixed windows (first 3 / last 3) which overlap in short traces,
+    # scan all steps and find the earliest and latest with a product identity.
 
-    listing_prices = [
-        s.cart_state.get("total")
-        for s in listing_steps
-        if s.cart_state and s.cart_state.get("total")
-    ]
-    checkout_prices = [
-        s.cart_state.get("total")
-        for s in checkout_steps
-        if s.cart_state and s.cart_state.get("total")
-    ]
+    first_product_step = None
+    last_product_step = None
 
-    if listing_prices and checkout_prices:
-        p_list = listing_prices[0]
-        p_check = checkout_prices[-1]
-        if abs(p_list - p_check) > 0.01:
+    for step in trace.steps:
+        names, ids = _extract_product_identities([step])
+        prices = _extract_item_prices(step)
+        has_signal = bool(names or ids or prices)
+
+        if has_signal and first_product_step is None:
+            first_product_step = step
+        if has_signal:
+            last_product_step = step
+
+    # Need two distinct steps with product info to compare
+    if first_product_step is None or last_product_step is None:
+        return Detection(
+            pattern="bait_and_switch",
+            detected=False,
+            confidence="low",
+            evidence="Could not extract product identity from any step in the trace",
+            step_index=0,
+            detection_method="deterministic",
+        )
+
+    if first_product_step.step_index == last_product_step.step_index:
+        return Detection(
+            pattern="bait_and_switch",
+            detected=False,
+            confidence="medium",
+            evidence="Product identity found in only one step; no transition to compare",
+            step_index=0,
+            detection_method="deterministic",
+        )
+
+    first_names, first_ids = _extract_product_identities([first_product_step])
+    last_names, last_ids = _extract_product_identities([last_product_step])
+
+    # Check 1: Product ID changed
+    if first_ids and last_ids and first_ids[0] != last_ids[0]:
+        return Detection(
+            pattern="bait_and_switch",
+            detected=True,
+            confidence="high",
+            evidence=f"Product ID changed from '{first_ids[0]}' (step {first_product_step.step_index}) to '{last_ids[0]}' (step {last_product_step.step_index}).",
+            step_index=last_product_step.step_index,
+            detection_method="deterministic",
+        )
+
+    # Check 2: Product name changed
+    if first_names and last_names and first_names[0].lower() != last_names[0].lower():
+        return Detection(
+            pattern="bait_and_switch",
+            detected=True,
+            confidence="high",
+            evidence=f"Product changed from '{first_names[0]}' (step {first_product_step.step_index}) to '{last_names[0]}' (step {last_product_step.step_index}).",
+            step_index=last_product_step.step_index,
+            detection_method="deterministic",
+        )
+
+    # Check 3: Per-item price changed (not total — total can change due to fees/add-ons)
+    first_prices = _extract_item_prices(first_product_step)
+    last_prices = _extract_item_prices(last_product_step)
+
+    if first_prices and last_prices:
+        _, p_first = first_prices[0]
+        last_name, p_last = last_prices[0]
+        if abs(p_first - p_last) > 0.01:
+            p_first_val = int(p_first) if float(p_first).is_integer() else p_first
+            p_last_val = int(p_last) if float(p_last).is_integer() else p_last
             return Detection(
                 pattern="bait_and_switch",
                 detected=True,
-                confidence="high",
-                evidence=f"Product shown as Rs {p_list} at listing, Rs {p_check} at checkout.",
-                step_index=checkout_steps[-1].step_index,
+                confidence="medium",
+                evidence=f"Item price changed from Rs {p_first_val} (step {first_product_step.step_index}) to Rs {p_last_val} (step {last_product_step.step_index}).",
+                step_index=last_product_step.step_index,
+                detection_method="deterministic",
+            )
+
+    # Check 4: Fallback — total price changed (less specific, may overlap with drip_pricing)
+    first_total = (first_product_step.cart_state or {}).get("total")
+    last_total = (last_product_step.cart_state or {}).get("total")
+
+    if first_total is not None and last_total is not None:
+        if abs(float(first_total) - float(last_total)) > 0.01:
+            ft = int(first_total) if isinstance(first_total, (int, float)) and float(first_total).is_integer() else first_total
+            lt = int(last_total) if isinstance(last_total, (int, float)) and float(last_total).is_integer() else last_total
+            return Detection(
+                pattern="bait_and_switch",
+                detected=True,
+                confidence="low",
+                evidence=f"Cart total changed from Rs {ft} (step {first_product_step.step_index}) to Rs {lt} (step {last_product_step.step_index}).",
+                step_index=last_product_step.step_index,
                 detection_method="deterministic",
             )
 
@@ -320,17 +529,32 @@ def detect_false_urgency(trace: AuditTrace) -> Detection:
 
 
 def detect_disguised_advertisement(trace: AuditTrace) -> Detection:
-    """Scan DOM for sponsored/ad items styled identically to organic items."""
-    ad_regex = re.compile(r'(class=["\'][^"\']*(?:sponsored|promoted|ad-card)[^"\']*["\'])', re.IGNORECASE)
+    """Scan DOM for sponsored/ad items by visible text content, aria-label, or title attributes."""
+    if not trace.steps:
+        return Detection(
+            pattern="disguised_advertisement",
+            detected=False,
+            confidence="medium",
+            evidence="No steps available to scan for disguised advertisements",
+            step_index=0,
+            detection_method="deterministic",
+        )
+
+    text_node_regex = re.compile(r'>\s*(?:Sponsored|Promoted|Ad)\s*<', re.IGNORECASE)
+    attr_regex = re.compile(r'(?:aria-label|title)\s*=\s*["\'][^"\']*\b(?:Sponsored|Promoted|Ad)\b[^"\']*["\']', re.IGNORECASE)
 
     for step in trace.steps:
-        match = ad_regex.search(step.dom_snapshot)
-        if match:
+        dom = step.dom_snapshot
+        text_match = text_node_regex.search(dom)
+        attr_match = attr_regex.search(dom)
+
+        if text_match or attr_match:
+            matched_cue = text_match.group(0).strip(">< \t\r\n") if text_match else "label/title attribute"
             return Detection(
                 pattern="disguised_advertisement",
                 detected=True,
                 confidence="medium",
-                evidence=f"Sponsored item identified without visual distinction at step {step.step_index}.",
+                evidence=f"Disguised advertisement indicator '{matched_cue}' detected in DOM at step {step.step_index}.",
                 step_index=step.step_index,
                 detection_method="deterministic",
             )
@@ -404,7 +628,7 @@ def detect_nagging(trace: AuditTrace) -> Detection:
 
 
 def detect_subscription_trap(trace: AuditTrace) -> Detection:
-    """Scan checkout steps for pre-selected recurring billing options."""
+    """Detect subscription cancellation friction, missing affordance, or mandatory card entry during cancellation."""
     if not trace.steps:
         return Detection(
             pattern="subscription_trap",
@@ -415,37 +639,105 @@ def detect_subscription_trap(trace: AuditTrace) -> Detection:
             detection_method="deterministic",
         )
 
-    recurring_keywords = ("monthly", "annual", "annually", "recurring", "auto-renew", "subscription", "per month", "per year")
-    checked_input_regex = re.compile(
-        r'<input[^>]+(?:type=["\'](?:radio|checkbox)["\']|checked)[^>]*>',
+    # 0. Context guard: only run cancellation-friction detector if page looks like a subscription flow
+    subscription_signals = (
+        "subscription",
+        "recurring",
+        "monthly",
+        "annual",
+        "annually",
+        "billing",
+        "auto-renew",
+        "per month",
+        "per year",
+        "/mo",
+        "/yr",
+        "/month",
+        "/year",
+        "membership",
+    )
+    is_subscription_flow = False
+    for step in trace.steps:
+        dom = step.dom_snapshot or ""
+        # Strip script and style content so CSS comments/class names don't produce false signals
+        clean_text = re.sub(r'<(?:style|script)[^>]*>.*?</(?:style|script)>', ' ', dom, flags=re.DOTALL | re.IGNORECASE).lower()
+        if any(sig in clean_text for sig in subscription_signals):
+            is_subscription_flow = True
+            break
+
+    if not is_subscription_flow:
+        return Detection(
+            pattern="subscription_trap",
+            detected=False,
+            confidence="high",
+            evidence="Page context does not indicate a subscription management flow",
+            step_index=0,
+            detection_method="deterministic",
+        )
+
+    cancel_keywords = ("cancel", "unsubscribe", "end subscription", "stop subscription")
+    cancel_affordance_regex = re.compile(
+        r'<(?:button|a|input)[^>]*>[^<]*(?:cancel|unsubscribe|end subscription|stop subscription)[^<]*</(?:button|a)>|'
+        r'<input[^>]+value=["\'][^"\']*(?:cancel|unsubscribe|end subscription|stop subscription)[^"\']*["\']',
+        re.IGNORECASE,
+    )
+    card_input_regex = re.compile(
+        r'(?:card[_-]?number|cvv|expiry|cardholder|card[_-]?name)',
         re.IGNORECASE,
     )
 
+    # 1. Check if card details form appears before / during cancellation flow
     for step in trace.steps:
-        dom = step.dom_snapshot
-        inputs = checked_input_regex.findall(dom)
-        for inp in inputs:
-            inp_lower = inp.lower()
-            is_checked = "checked" in inp_lower or "aria-checked=\"true\"" in inp_lower
-            if is_checked:
-                pos = dom.find(inp)
-                if pos != -1:
-                    snippet = dom[max(0, pos - 250) : min(len(dom), pos + 350)].lower()
-                    if any(kw in snippet for kw in recurring_keywords):
-                        return Detection(
-                            pattern="subscription_trap",
-                            detected=True,
-                            confidence="high",
-                            evidence=f"Pre-selected recurring billing option found in DOM at step {step.step_index}.",
-                            step_index=step.step_index,
-                            detection_method="deterministic",
-                        )
+        dom = step.dom_snapshot or ""
+        if card_input_regex.search(dom):
+            if any(kw in dom.lower() for kw in cancel_keywords):
+                return Detection(
+                    pattern="subscription_trap",
+                    detected=True,
+                    confidence="high",
+                    evidence=f"Payment/card details required during cancellation flow at step {step.step_index}.",
+                    step_index=step.step_index,
+                    detection_method="deterministic",
+                )
+
+    # 2. Count steps required to reach a cancellation confirmation
+    cancel_steps = [
+        step
+        for step in trace.steps
+        if any(kw in (step.dom_snapshot or "").lower() for kw in cancel_keywords)
+    ]
+    if len(cancel_steps) > 2:
+        return Detection(
+            pattern="subscription_trap",
+            detected=True,
+            confidence="high",
+            evidence=f"Cancellation required {len(cancel_steps)} steps (threshold: 2)",
+            step_index=cancel_steps[-1].step_index,
+            detection_method="deterministic",
+        )
+
+    # 3. Check if cancel affordance is discoverable in first 3 steps
+    early_steps = trace.steps[: min(3, len(trace.steps))]
+    has_early_affordance = any(
+        cancel_affordance_regex.search(step.dom_snapshot or "")
+        or any(kw in (step.dom_snapshot or "").lower() for kw in cancel_keywords)
+        for step in early_steps
+    )
+    if not has_early_affordance and len(trace.steps) >= 3:
+        return Detection(
+            pattern="subscription_trap",
+            detected=True,
+            confidence="medium",
+            evidence="No cancel affordance found in first 3 steps",
+            step_index=min(2, len(trace.steps) - 1),
+            detection_method="deterministic",
+        )
 
     return Detection(
         pattern="subscription_trap",
         detected=False,
         confidence="high",
-        evidence="No pre-selected recurring billing options found at checkout",
+        evidence="No subscription cancellation friction or traps detected",
         step_index=0,
         detection_method="deterministic",
     )
@@ -655,20 +947,76 @@ def _run_judge_detector(pattern: str, trace: AuditTrace, candidate_steps: list[A
 
 
 def detect_confirm_shaming(trace: AuditTrace) -> Detection:
-    """Evaluate confirm shaming for steps containing decline/cancel options."""
-    shame_keywords = ("no thanks", "decline", "cancel", "remove", "don't want", "skip")
+    """Evaluate confirm shaming for steps containing emotionally loaded guilt-framing decline language."""
+    guilt_substrings = (
+        "cold-blooded",
+        "don't care about",
+        "dont care about",
+        "heartless",
+        "selfish",
+        "don't care",
+        "dont care",
+        "don't want to fund",
+        "dont want to fund",
+        "won't",
+        "wont",
+        "refuse",
+    )
+    guilt_phrase_regex = re.compile(
+        r"\b(?:yes|no),?\s*i\s+(?:am\s+)?[a-z\s-]{2,}",
+        re.IGNORECASE,
+    )
+
+    def _has_guilt_language(dom_lower: str) -> bool:
+        if any(sub in dom_lower for sub in guilt_substrings):
+            return True
+        for match in guilt_phrase_regex.finditer(dom_lower):
+            phrase = match.group(0)
+            if any(term in phrase for term in ("cold-blooded", "heartless", "selfish", "care", "refuse", "bad", "shame", "cheap", "hate")):
+                return True
+        return False
+
     candidate_steps = [
         s for s in trace.steps
-        if any(kw in s.dom_snapshot.lower() for kw in shame_keywords)
+        if _has_guilt_language(s.dom_snapshot.lower())
     ]
     return _run_judge_detector("confirm_shaming", trace, candidate_steps)
 
 
 def detect_interface_interference(trace: AuditTrace) -> Detection:
-    """Evaluate interface interference for steps with multiple CTAs."""
+    """Evaluate interface interference for steps with asymmetric CTA button styling."""
+    primary_classes = ("ii-primary", "ii-primary-lg")
+    secondary_classes = ("ii-muted-sm", "ii-muted-link", "ii-risk", "ii-hidden-x")
+
+    def _has_cta_asymmetry(dom: str) -> bool:
+        dom_lower = dom.lower()
+
+        # Check for ii-actions container
+        container_regex = re.compile(
+            r'<div[^>]*class=["\'][^"\']*\bii-actions\b[^"\']*["\'][^>]*>(.*?)</div>',
+            re.IGNORECASE | re.DOTALL,
+        )
+        containers = container_regex.findall(dom)
+
+        for container in containers:
+            cont_lower = container.lower()
+            has_primary = (
+                any(cls in cont_lower for cls in primary_classes)
+                or ("<button" in cont_lower and "autofocus" in cont_lower)
+            )
+            has_secondary = (
+                any(cls in cont_lower for cls in secondary_classes)
+                or "<a" in cont_lower
+                or "ii-hidden-x" in dom_lower
+            )
+            if has_primary and has_secondary:
+                return True
+
+        return False
+
     candidate_steps = [
         s for s in trace.steps
-        if s.dom_snapshot.lower().count("<button") >= 2 or s.dom_snapshot.lower().count("role=\"button\"") >= 2
+        if _has_cta_asymmetry(s.dom_snapshot)
     ]
     return _run_judge_detector("interface_interference", trace, candidate_steps)
 

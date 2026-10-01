@@ -16,6 +16,7 @@ from auditor.detector import (
     detect_disguised_advertisement,
     detect_drip_pricing,
     detect_false_urgency,
+    detect_subscription_trap,
     detect_violations,
 )
 from auditor.field import (
@@ -160,7 +161,7 @@ def test_detector_rules() -> None:
     step1 = AuditStep(
         step_index=1,
         url="http://testbed.local/page2",
-        dom_snapshot="<html><body>Cart page. <div class='sponsored'>Ad Item</div> Hurry! Only 2 left in stock!</body></html>",
+        dom_snapshot="<html><body>Cart page. <div><span>Sponsored</span> Ad Item</div> Hurry! Only 2 left in stock!</body></html>",
         screenshot=b"img1",
         action_taken={"action": "click", "index": 1},
         reasoning="Proceed to checkout",
@@ -257,3 +258,116 @@ def test_zero_evaluation_metrics_reporting(capsys: pytest.CaptureFixture[str]) -
     captured = capsys.readouterr().out
     assert "NO EPISODES EVALUATED" in captured
     assert "NO DATA / ERRORED" in captured
+
+
+def test_subscription_trap_context_guard_suppresses_fp_on_non_subscription_pages() -> None:
+    # 4-step e-commerce trace with no cancel button in first 3 steps and a "Cancel order" button
+    steps = [
+        AuditStep(
+            step_index=i,
+            url=f"http://shop.local/step{i}",
+            dom_snapshot=(
+                f"<html><head><style>/* subscription trap styles */</style></head>"
+                f"<body><h1>Product {i}</h1><button>Add to Cart</button></body></html>"
+                if i < 3
+                else "<html><head><style>/* subscription */</style></head><body><button>Cancel order</button></body></html>"
+            ),
+            screenshot=b"img",
+            action_taken={"action": "click"},
+            reasoning=f"Step {i}",
+            cart_state=None,
+            timestamp=datetime.now(timezone.utc),
+        )
+        for i in range(4)
+    ]
+    trace = AuditTrace(
+        site_id="shop_site",
+        url="http://shop.local",
+        timestamp_id="20260909T100000Z",
+        steps=steps,
+    )
+    det = detect_subscription_trap(trace)
+    assert det.detected is False
+    assert "Page context does not indicate a subscription management flow" in det.evidence
+
+
+def test_subscription_trap_detects_in_subscription_flow() -> None:
+    # Subscription page with recurring/monthly signal and excessive cancellation friction (3 cancel steps)
+    steps = [
+        AuditStep(
+            step_index=i,
+            url=f"http://service.local/cancel_step{i}",
+            dom_snapshot=f"<html><body><h1>Manage Subscription</h1><p>Monthly billing: Rs 199/mo</p><button>Cancel subscription</button></body></html>",
+            screenshot=b"img",
+            action_taken={"action": "click"},
+            reasoning=f"Cancel step {i}",
+            cart_state=None,
+            timestamp=datetime.now(timezone.utc),
+        )
+        for i in range(3)
+    ]
+    trace = AuditTrace(
+        site_id="subscription_service",
+        url="http://service.local",
+        timestamp_id="20260909T100000Z",
+        steps=steps,
+    )
+    det = detect_subscription_trap(trace)
+    assert det.detected is True
+    assert "Cancellation required 3 steps" in det.evidence
+
+
+def test_basket_sneaking_distinguishes_substitution_from_sneaked_addition() -> None:
+    # 1. Substitution (bait and switch): count remains 1 (Item A -> Item B). Should NOT flag.
+    step0 = AuditStep(
+        step_index=0,
+        url="http://shop.local/step0",
+        dom_snapshot="<html><body>Product page</body></html>",
+        screenshot=b"img",
+        action_taken={"action": "click", "value": "add-btn"},
+        reasoning="Add product to cart",
+        cart_state={"total": 999.0, "items": [{"name": "Wireless Earbuds (Basic)", "price": 999.0}]},
+        timestamp=datetime.now(timezone.utc),
+    )
+    step1_sub = AuditStep(
+        step_index=1,
+        url="http://shop.local/step1",
+        dom_snapshot="<html><body>Checkout page</body></html>",
+        screenshot=b"img",
+        action_taken={"action": "click"},
+        reasoning="Proceed with purchase",
+        cart_state={"total": 1799.0, "items": [{"name": "Wireless Earbuds (Pro)", "price": 1799.0}]},
+        timestamp=datetime.now(timezone.utc),
+    )
+    trace_sub = AuditTrace(
+        site_id="shop_sub",
+        url="http://shop.local",
+        timestamp_id="20260909T100000Z",
+        steps=[step0, step1_sub],
+    )
+    det_sub = detect_basket_sneaking(trace_sub)
+    assert det_sub.detected is False
+    assert "No unrequested items were added to the cart" in det_sub.evidence
+
+    # 2. Sneaked addition: count grows from 1 to 2 (Item A -> Item A + Mystery Item). Should flag.
+    step1_sneak = AuditStep(
+        step_index=1,
+        url="http://shop.local/step1",
+        dom_snapshot="<html><body>Checkout page</body></html>",
+        screenshot=b"img",
+        action_taken={"action": "click"},
+        reasoning="Proceed with purchase",
+        cart_state={"total": 1049.0, "items": [{"name": "Wireless Earbuds (Basic)", "price": 999.0}, {"name": "Mystery Add-on", "price": 50.0}]},
+        timestamp=datetime.now(timezone.utc),
+    )
+    trace_sneak = AuditTrace(
+        site_id="shop_sneak",
+        url="http://shop.local",
+        timestamp_id="20260909T100000Z",
+        steps=[step0, step1_sneak],
+    )
+    det_sneak = detect_basket_sneaking(trace_sneak)
+    assert det_sneak.detected is True
+    assert "Mystery Add-on" in det_sneak.evidence
+
+

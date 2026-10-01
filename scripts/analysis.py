@@ -462,10 +462,12 @@ def table_paired_language_mcnemar(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Da
         matched = merged[merged["_merge"] == "both"].copy()
         matched["deceived_en"] = matched["outcome_en"].apply(_deceived)
         matched[f"deceived_{lang}"] = matched[f"outcome_{lang}"].apply(_deceived)
-        usable = matched.dropna(subset=["deceived_en", f"deceived_{lang}"])
+        usable = matched.dropna(subset=["deceived_en", f"deceived_{lang}"]).copy()
 
-        b = int(((usable["deceived_en"]) & (~usable[f"deceived_{lang}"])).sum())
-        c = int(((~usable["deceived_en"]) & (usable[f"deceived_{lang}"])).sum())
+        dec_en = usable["deceived_en"].astype(bool)
+        dec_other = usable[f"deceived_{lang}"].astype(bool)
+        b = int((dec_en & ~dec_other).sum())
+        c = int((~dec_en & dec_other).sum())
         discordant = b + c
         p_value = stats.binomtest(min(b, c), discordant, 0.5, alternative="two-sided").pvalue if discordant else None
 

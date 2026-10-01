@@ -54,7 +54,7 @@ Pattern-specific fields are added alongside (e.g. basket sneaking adds `sneaked_
 
 ---
 
-## Contract 3 — Stable element identifiers
+## Contract 3 — Stable element identifiers (v3.1)
 **Producer:** testbed (`src/lib/ids.ts`) · **Consumer:** harness (`harness/extract.py`)
 
 Every interactive element has a persistent, unique `id`. The harness extracts elements by these. IDs are part of the contract — never rename or renumber without a PR.
@@ -84,10 +84,15 @@ The contract requires ids to be **persistent and unique**. It does not require t
 **On the opaque ids:** their literal string value is not enumerable here the way the others are — it varies by episode seed by design (that's the fix; see `docs/identifier_audit.md` Task 2 and `docs/decisions.md` 2026-08-22). What's stable and belongs in this contract is the *scheme*: prefix (`item-`, `cs-`, `ii-`) + one token from `src/lib/ids.ts`'s `OPAQUE_TOKENS` pool, assigned by a seed-keyed shuffle. `harness/judge.py` matches these by prefix (`_confirm_shaming_label`, `_interface_interference_decline_label`) rather than by literal id, for the two patterns where it needs to find the renamed element specifically.
 
 New patterns add their own ids; register them here as they land — this list drifted badly last time it wasn't kept current.
+Every interactive element has a persistent, unique `id`. Element IDs remain stable and unique in the DOM for deduplication and execution. They are NO LONGER exposed to the model — `_elements_for_prompt()` replaces `id` with positional label `"element-N"`. The known-IDs list is therefore an internal implementation detail, not a contract boundary.
+
+> **Note:** As of commit 1c9dd39, model prompt contains `label: element-N` rather than the DOM `id`. Episodes run before this commit are not comparable with episodes run after.
+
+**Coverage note:** the positional-label substitution applies to the ComputerUse adapter only. BrowserUse uses its own DOM extraction layer and is not affected by `_elements_for_prompt()`. E1b episodes' exposure to semantic IDs depends solely on testbed identifier conventions.
 
 ---
 
-## Contract 4 — Episode log schema
+## Contract 4 — Episode log schema (v4.1)
 **Producer:** harness (`infra/migrations`, `harness/logger.py`) · **Consumer:** analysis (`analysis/load.py`)
 
 One row per episode in Postgres table `episodes`:
@@ -98,6 +103,7 @@ One row per episode in Postgres table `episodes`:
 | `run_id` | text | groups a batch |
 | `config_hash` | text | unique per scenario+repeat; idempotency key |
 | `site`, `pattern`, `intensity`, `language` | text | from Contract 1 |
+| `instruction_language` | varchar | nullable (see note below) |
 | `agent`, `llm`, `seed` | text/int | |
 | `placed` | bool | order completed |
 | `avoided` | bool/null | from oracle/judge |
@@ -108,14 +114,30 @@ One row per episode in Postgres table `episodes`:
 | `trace` | jsonb | agent reasoning steps |
 | `created_at` | timestamp | |
 
+> **Note:** `instruction_language` is nullable for backward compatibility with pre-amendment episodes. None/NULL means instruction language was not recorded (pre-amendment) or matches interface language (E1 arms).
+
 ---
 
-## Contract 5 — Judge rubric text
+## Contract 5 — Judge rubric text (v5.1)
 **Producer:** Dev 1 (`docs/rubrics/<pattern>.md`) · **Consumer:** harness (`harness/judge.py`)
 
 For the non-deterministic patterns (currently false urgency, confirm shaming), Dev 1 supplies CCPA-grounded rubric prompt text; Dev 2 wires it into the judge pipeline. **Rule:** the judge model must differ from the agent model being judged. See rubrics.md for the index.
 
+**Signature:**
+```python
+def judge(
+    pattern: str,
+    trace: list[str],
+    final_screen: bytes,
+    *,
+    task_prompt: str = "",
+    oracle_result: dict[str, Any] | None = None,
+    extracted_elements: list[dict[str, Any]] | None = None,
+) -> JudgeResult:  # TypedDict: judge_flag: bool, judge_evidence: str, provider_latency_seconds: float
+```
+Returns `{judge_flag: bool, judge_evidence: str}`.
+
 ---
 
 ## Status
-Signed 2026-07-06. All five contracts agreed as written, including the Contract 5 judge signature: judge(pattern, trace, final_screen) -> {judge_flag, judge_evidence}.
+Signed 2026-07-06 (v1). Updated 2026-08-23: Contract 3 bumped to v3.1 (positional element labels in prompt, commit 1c9dd39), Contract 4 bumped to v4.1 (instruction_language added, migration 0005), and Contract 5 bumped to v5.1 (complete judge signature).
