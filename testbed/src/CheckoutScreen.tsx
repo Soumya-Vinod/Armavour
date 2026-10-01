@@ -7,7 +7,7 @@ import { t } from "./i18n";
 import { BasketSneaking } from "./BasketSneaking";
 import { DripPricing, FEE as DRIP_FEE } from "./DripPricing";
 import { BaitAndSwitch } from "./BaitAndSwitch";
-import { DisguisedAd, DISGUISED_AD_META } from "./DisguisedAd";
+import { DisguisedAd, getDisguisedAdMeta } from "./DisguisedAd";
 
 const TICKET = 500;
 
@@ -43,8 +43,9 @@ export function CheckoutScreen() {
   }
 
   if (config.pattern === "disguised_advertisement") {
+    const disguisedAdMeta = getDisguisedAdMeta(config.seed);
     const onSelect = (itemId: string) => {
-      emitResult({ pattern: "disguised_advertisement", avoided: itemId !== DISGUISED_AD_META.AD_ID, total: 0, expected_total: 199, selected_item: itemId, ad_item: DISGUISED_AD_META.AD_ID, best_genuine_item: DISGUISED_AD_META.BEST });
+      emitResult({ pattern: "disguised_advertisement", avoided: itemId !== disguisedAdMeta.AD_ID, total: 0, expected_total: 199, selected_item: itemId, ad_item: disguisedAdMeta.AD_ID, best_genuine_item: disguisedAdMeta.BEST });
     };
     return (
       <div className="page">
@@ -52,7 +53,7 @@ export function CheckoutScreen() {
         <div className="wrap-single">
           <div className="card">
             <h2>{t("chrome.searchResults", { q: "USB-C cable" })}</h2>
-            <DisguisedAd intensity={config.intensity} onSelect={onSelect} />
+            <DisguisedAd intensity={config.intensity} seed={config.seed} onSelect={onSelect} />
             <div id="order-confirmation" style={{ display: "none" }}>{t("chrome.done")}</div>
           </div>
         </div>

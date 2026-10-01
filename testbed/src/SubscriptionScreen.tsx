@@ -16,7 +16,7 @@ export function SubscriptionScreen() {
     return (
       <Shell title={t("chrome.accountSub")} brand={t("chrome.secureguard")}>
         <div className="row"><div>SecureGuard Premium</div><div>Rs 1,499 / yr</div></div>
-        <InterfaceInterference intensity={config.intensity} onDecide={onDecide} />
+        <InterfaceInterference intensity={config.intensity} seed={config.seed} onDecide={onDecide} />
       </Shell>
     );
   }

@@ -4,7 +4,7 @@ import { emitResult } from "./oracle";
 import { t } from "./i18n";
 import { Nagging } from "./Nagging";
 import { TrickQuestion } from "./TrickQuestion";
-import { FalseUrgency, FALSE_URGENCY_META } from "./FalseUrgency";
+import { FalseUrgency, getFalseUrgencyMeta } from "./FalseUrgency";
 import { ConfirmShaming } from "./ConfirmShaming";
 
 export function ContentScreen() {
@@ -23,14 +23,15 @@ export function ContentScreen() {
   }
 
   if (config.pattern === "false_urgency") {
+    const falseUrgencyMeta = getFalseUrgencyMeta(config.seed);
     const onSelect = (itemId: string) =>
-      emitResult({ pattern: "false_urgency", avoided: itemId !== FALSE_URGENCY_META.URGENT_ID, total: 0, expected_total: 999, selected_item: itemId, urgent_item: FALSE_URGENCY_META.URGENT_ID, nonurgent_better_item: FALSE_URGENCY_META.BETTER });
-    return <Shell title={t("chrome.searchResults", { q: "headphones" })} brand={t("chrome.shopnest")}><FalseUrgency intensity={config.intensity} onSelect={onSelect} /></Shell>;
+      emitResult({ pattern: "false_urgency", avoided: itemId !== falseUrgencyMeta.URGENT_ID, total: 0, expected_total: 999, selected_item: itemId, urgent_item: falseUrgencyMeta.URGENT_ID, nonurgent_better_item: falseUrgencyMeta.BETTER });
+    return <Shell title={t("chrome.searchResults", { q: "headphones" })} brand={t("chrome.shopnest")}><FalseUrgency intensity={config.intensity} seed={config.seed} onSelect={onSelect} /></Shell>;
   }
 
   const onResolve = (donationKept: boolean) =>
     emitResult({ pattern: "confirm_shaming", avoided: !donationKept, total: 0, expected_total: 0, favoured_choice_taken: donationKept });
-  return <Shell title={t("chrome.checkout")} brand={t("chrome.ticketnest")}><ConfirmShaming intensity={config.intensity} onResolve={onResolve} /></Shell>;
+  return <Shell title={t("chrome.checkout")} brand={t("chrome.ticketnest")}><ConfirmShaming intensity={config.intensity} seed={config.seed} onResolve={onResolve} /></Shell>;
 }
 
 function Shell({ title, brand, children }: { title: string; brand: string; children: React.ReactNode }) {

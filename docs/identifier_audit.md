@@ -1,6 +1,12 @@
 # Identifier Leakage Audit — Task 1
 
-**Status: diagnostic only. No code changed. Awaiting sign-off before Task 2.**
+**Status: Task 1 findings below are as originally written. Task 2 is approved and
+implemented** (see `docs/decisions.md` 2026-08-22) **with one change from what Task 1
+proposed: `cs-remove2` and `decline-btn` are reclassified LEAKING, not BORDERLINE — see
+the update in their sections below.** All four leaking ids now resolve to opaque,
+seed-derived tokens (`testbed/src/lib/ids.ts`); `docs/contracts.md` Contract 3 and
+`docs/element_ids.md` carry the current scheme. `matrix-full-e1e2`'s existing 1,928
+episodes predate this change for all four affected patterns — see Task 3 scoping.
 
 Scope: every element `id` in `testbed/src/*.tsx` that reaches the acting agent, across
 all twelve in-scope patterns, classified LEAKING / SAFE / BORDERLINE relative to what
@@ -79,10 +85,12 @@ needs it for Contract 3's known-ID list regardless of leak status.
 | `buy-item-ad` | Yes (button) | **LEAKING** | Spec §6: the task is "buy the cheapest **genuine** product"; §2's whole measurability requirement is that the agent can only avoid the ad by *detecting the disguise*, not by price comparison (the ad is deliberately the cheapest — v2 revision note). `id="buy-item-ad"` hands the agent the answer to "which one is the ad" directly, in the one channel (`id`) that bypasses the rendered label the intensity ladder is supposed to control. |
 | `buy-item-org-1/2/3` | Yes (button) | **LEAKING** | Same task-dependency: "org" is a legible abbreviation of "organic" — precisely the word the spot-check trace used, and precisely the word that never appears in rendered text (`t("da.*")` strings never say "organic" or "genuine"). |
 
-Replacement: opaque per-item ids on the buttons (and, for consistency, the row `<div
-id={item.id}>` even though it doesn't currently leak, so nothing keys off the same
-semantic string elsewhere) — e.g. `item-a`/`item-b`/`item-c`/`item-d`, assignment
-randomised per seed, not tied to ad/organic role or list position.
+**Implemented in Task 2:** opaque per-item ids on both the row `<div id={item.id}>` and
+the button `id={`buy-${item.id}`}` (so nothing keys off the old semantic string
+anywhere) — `item-<token>` × 4, `token` from `testbed/src/lib/ids.ts`'s seed-shuffled
+opaque pool. Assignment is randomised per seed, not tied to ad/organic role or list
+position; `DISGUISED_AD_META` became `getDisguisedAdMeta(seed)` so the internal
+`AD_ID`/`BEST` constants still resolve to the right element.
 
 ### false_urgency — **LEAKING** (confirmed bug)
 
@@ -92,10 +100,24 @@ randomised per seed, not tied to ad/organic role or list position.
 | `buy-item-calm-1` | Yes (button) | **LEAKING** | This is `BETTER`/`nonurgent_better_item` — the task-correct choice. Six traces you found reference it directly by id. |
 | `buy-item-calm-2` | Yes (button) | **LEAKING** | Same family; not the "better" item but still named by the same leaking convention (`calm` vs `urgent`), so it carries the same signal. |
 
-Replacement: same treatment as disguised_ad — opaque, seed-randomised, not ordinally
-tied to urgency role.
+**Implemented in Task 2:** same treatment as disguised_ad — opaque, seed-shuffled
+`item-<token>` × 3, not ordinally tied to urgency role. `FALSE_URGENCY_META` became
+`getFalseUrgencyMeta(seed)`.
 
-### confirm_shaming — **BORDERLINE**, one element
+### confirm_shaming — **LEAKING** (reclassified from BORDERLINE — see below)
+
+**Update, post sign-off:** reclassified LEAKING, not BORDERLINE. The reasoning below
+(leaking only at aggressive intensity) is unchanged, but "only leaks at aggressive"
+isn't mitigating — it means the leak lands exactly where the manipulation is strongest,
+selectively neutralising the top rung of the intensity ladder while every other rung
+stays measurable. That's the same shape of failure as `disguised_advertisement` v1
+(unmeasurable at the exact condition meant to be hardest), just confined to one
+intensity cell instead of the whole pattern. `confirm_shaming` is a reported near-null
+in the current results (the paper's own draft figures put it at 2.2%/0.0% E1a/E1b DC
+rate — see `docs/table_reconciliation.md`); the leak at aggressive is a candidate
+explanation for at least part of that, worth checking against a re-run before it's
+reported as a finding about agent behaviour rather than about instrumentation. Fixed in
+Task 2 — `cs-remove2` is now an opaque, seed-derived id (`testbed/src/lib/ids.ts`).
 
 | Element id | Reaches model? | Classification | Reasoning |
 |---|---|---|---|
@@ -110,7 +132,15 @@ benchmark shouldn't have one of its four intensity cells silently unmeasurable t
 v1 disguised_ad was): opaque id for `cs-remove2`, distinct from `cs-keep2`'s pattern so
 no naming convention re-encodes which one is which.
 
-### interface_interference — **BORDERLINE**, one element (same shape as confirm_shaming)
+### interface_interference — **LEAKING** (reclassified from BORDERLINE — see below)
+
+**Update, post sign-off:** reclassified LEAKING, not BORDERLINE, same reasoning as
+confirm_shaming above — leaking only at aggressive intensity selectively neutralises
+the top rung of the ladder rather than mitigating anything. This is the pattern's
+gold-task intensity (McAfee) and it's a reported 0% DPSR null at every intensity
+including aggressive in the pilot data (`docs/GATE3_FINDINGS.md`) — the leak is a
+candidate explanation for at least the aggressive cell of that null. Fixed in Task 2 —
+`decline-btn` is now an opaque, seed-derived id (`testbed/src/lib/ids.ts`).
 
 | Element id | Reaches model? | Classification | Reasoning |
 |---|---|---|---|
@@ -182,27 +212,28 @@ correctness requirement.
 
 ## 3. Summary
 
-| Pattern | Verdict | Leaking/borderline ids |
-|---|---|---|
-| disguised_advertisement | **LEAKING** | `buy-item-ad`, `buy-item-org-1`, `buy-item-org-2`, `buy-item-org-3` |
-| false_urgency | **LEAKING** | `buy-item-urgent`, `buy-item-calm-1`, `buy-item-calm-2` |
-| confirm_shaming | BORDERLINE | `cs-remove2` (aggressive intensity only) |
-| interface_interference | BORDERLINE | `decline-btn` (aggressive intensity only) |
-| basket_sneaking | SAFE | — |
-| bait_and_switch | SAFE | — |
-| drip_pricing | SAFE | — |
-| forced_action | SAFE | — |
-| nagging | SAFE | — |
-| subscription_trap | SAFE | — |
-| trick_question | SAFE | — |
-| saas_billing | SAFE | — |
+| Pattern | Verdict | Leaking id(s) | Fixed in Task 2 |
+|---|---|---|---|
+| disguised_advertisement | **LEAKING** | `buy-item-ad`, `buy-item-org-1`, `buy-item-org-2`, `buy-item-org-3` | Yes — opaque `item-<token>` × 4 |
+| false_urgency | **LEAKING** | `buy-item-urgent`, `buy-item-calm-1`, `buy-item-calm-2` | Yes — opaque `item-<token>` × 3 |
+| confirm_shaming | **LEAKING** (reclassified from BORDERLINE) | `cs-remove2` (aggressive intensity only) | Yes — opaque `cs-<token>` |
+| interface_interference | **LEAKING** (reclassified from BORDERLINE) | `decline-btn` (aggressive intensity only) | Yes — opaque `ii-<token>` |
+| basket_sneaking | SAFE | — | not touched |
+| bait_and_switch | SAFE | — | not touched |
+| drip_pricing | SAFE | — | not touched |
+| forced_action | SAFE | — | not touched |
+| nagging | SAFE | — | not touched |
+| subscription_trap | SAFE | — | not touched |
+| trick_question | SAFE | — | not touched |
+| saas_billing | SAFE | — | not touched |
 
-Two patterns confirmed broken exactly as you diagnosed (10/10 on your two examples).
-Two more patterns (`confirm_shaming`, `interface_interference`) have the *same class*
-of bug, but it only bites at aggressive intensity, on one button each — worth deciding
-now rather than finding via another spot-check later, since it's the same mechanism
-that produced the original bug report and both are gold-task patterns
-(PhysicsWallah / McAfee).
+Two patterns confirmed broken exactly as diagnosed (10/10 on the original two
+examples). Two more patterns (`confirm_shaming`, `interface_interference`) had the
+*same class* of bug, only biting at aggressive intensity, on one button each — reclassified
+LEAKING rather than left BORDERLINE, since it's the same mechanism that produced the
+original bug report and both are gold-task patterns (PhysicsWallah / McAfee). All four
+are fixed as of `docs/decisions.md` 2026-08-22 — see Task 3 for what re-running the
+affected patterns/arms against `matrix-full-e1e2`'s existing data would cost.
 
 ## 4. Incidental findings (not asked for, flagging per your standing request)
 
@@ -250,9 +281,16 @@ Container-only (never reach the model, listed for completeness): `order-confirma
 `tq-label`, `tq-result`, `cs-flow`, `cs-donation`, `cs-label`, `cs-shame`, `cs-result`,
 `trial-flow`, `sb-renew-label`, `sb-result`.
 
-## 5. Stop
+## 5. Status
 
-That's Task 1. No code touched. Waiting on your sign-off — specifically on (a) whether
-you agree with the two BORDERLINE calls (`cs-remove2`, `decline-btn`) being treated as
-leaking for Task 2 purposes, and (b) the Contract 3 known-IDs staleness / Contract 5
-signature deviation notes above, before I touch anything.
+Task 1 findings above stand as originally written (the two BORDERLINE→LEAKING
+reclassifications are the only edits, each marked inline). Task 2 is implemented: all
+four leaking ids are opaque and seed-derived (`testbed/src/lib/ids.ts`), Contract 3 and
+`docs/element_ids.md` are current, and `docs/decisions.md` (2026-08-22) records the
+change, the reasoning, and that `matrix-full-e1e2`'s existing 1,928 episodes are not
+comparable to a re-run for the four affected patterns. See `docs/decisions.md` for the
+full change note, including the harness/judge.py fallout (two id-matching functions had
+to switch from a literal match to a prefix match, flagged there for Dev 2's review since
+it's outside Dev 1's ownership) and the Contract 5 signature deviation noted in §4 below
+(unresolved, out of scope for this task). Task 3 (re-run scoping) is a separate report,
+not a code change.

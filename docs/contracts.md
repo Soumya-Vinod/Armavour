@@ -57,7 +57,33 @@ Pattern-specific fields are added alongside (e.g. basket sneaking adds `sneaked_
 ## Contract 3 — Stable element identifiers
 **Producer:** testbed (`src/lib/ids.ts`) · **Consumer:** harness (`harness/extract.py`)
 
-Every interactive element has a persistent, unique `id`. The harness extracts elements by these. IDs are part of the contract — never rename or renumber without a PR. Known IDs so far: `pay`, `donation`, `donation-block`, `donation-label`, `donation-remove`, `total`, `order-confirmation`. New patterns add their own; register them here as they land.
+Every interactive element has a persistent, unique `id`. The harness extracts elements by these. IDs are part of the contract — never rename or renumber without a PR.
+
+The contract requires ids to be **persistent and unique**. It does not require them to be meaningful, and it does not forbid them being opaque — both readings are compatible with the text above. `src/lib/ids.ts` (added 2026-08-22) takes advantage of that: four ids that encoded the answer to their pattern's task (`docs/identifier_audit.md`) are opaque, seed-derived tokens instead of literal semantic strings — still persistent and unique per episode (same seed ⇒ same id), still consumed by `extract.py` the same way, just not decodable by reading the string.
+
+**Known ids, current as of 2026-08-22** (this list was significantly out of date before this pass — see `docs/identifier_audit.md` §4 for how far it had drifted; `docs/element_ids.md` carries the same table and should be kept in sync with this one):
+
+| Pattern | Interactive ids (reach the model via `extract.py`) |
+|---|---|
+| shared (checkout screens) | `pay`, `total`†, `order-confirmation`† |
+| basket_sneaking | `donation`, `donation-remove` |
+| bait_and_switch | `bs-add`, `bs-buy`, `bs-accept`, `bs-abandon` |
+| drip_pricing | `fee-reveal`, `dp-decline` |
+| disguised_advertisement | `buy-<id>` × 4, where `<id>` is one of 4 seed-shuffled opaque ids from `assignOpaqueIds(seed, 4, "item")` (`src/lib/ids.ts`) — no longer literal strings, see note below |
+| false_urgency | `buy-<id>` × 3, same scheme, `assignOpaqueIds(seed, 3, "item")` |
+| interface_interference | `renew-btn`, `close-x` (aggressive only), and one opaque id `ii-<token>` from `assignOpaqueIds(seed, 1, "ii")` (replaces the literal `decline-btn`) |
+| forced_action | `fa-phone`, `fa-email`, `enrol-btn`, `skip-btn` (subtle/moderate), `abandon-btn` (aggressive) |
+| nagging | `nag-finish`, `nag-yes`, `nag-no` |
+| subscription_trap | `cancel-btn` (control only), `st-continue`, `st-keep`, `st-reason`, `st-password` |
+| trick_question | `tq-box`, `tq-save` |
+| confirm_shaming | `cs-box`, `cs-keep`, `cs-remove`, `cs-keep2`, and one opaque id `cs-<token>` from `assignOpaqueIds(seed, 1, "cs")` (replaces the literal `cs-remove2`) |
+| saas_billing | `sb-autorenew`, `sb-start` |
+
+†`total` is a `<span>`, not actually in `extract.py`'s `INTERACTIVE_SELECTOR` — it doesn't currently reach the model. `order-confirmation` is a container `<div>`, same caveat.
+
+**On the opaque ids:** their literal string value is not enumerable here the way the others are — it varies by episode seed by design (that's the fix; see `docs/identifier_audit.md` Task 2 and `docs/decisions.md` 2026-08-22). What's stable and belongs in this contract is the *scheme*: prefix (`item-`, `cs-`, `ii-`) + one token from `src/lib/ids.ts`'s `OPAQUE_TOKENS` pool, assigned by a seed-keyed shuffle. `harness/judge.py` matches these by prefix (`_confirm_shaming_label`, `_interface_interference_decline_label`) rather than by literal id, for the two patterns where it needs to find the renamed element specifically.
+
+New patterns add their own ids; register them here as they land — this list drifted badly last time it wasn't kept current.
 
 ---
 
