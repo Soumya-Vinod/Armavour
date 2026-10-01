@@ -126,9 +126,11 @@ class Adapter:
         elements: list[dict[str, Any]],
         trace: list[dict[str, Any]],
     ) -> tuple[dict[str, Any], dict[str, int]]:
+        # The episode config (pattern, intensity, seed, config_hash, ...) must never
+        # reach the model: it names the manipulated condition. It stays on the row
+        # via runner._base_row for logging.
         prompt = {
             "task": task,
-            "config": _jsonable(config),
             "elements": _elements_for_prompt(elements),
             "previous_steps": trace,
             "instructions": (
@@ -294,14 +296,6 @@ def _usage_tokens(response: Any) -> dict[str, int]:
         "in_tokens": int(prompt_tokens or 0),
         "out_tokens": int(completion_tokens or 0),
     }
-
-
-def _jsonable(value: Any) -> Any:
-    if hasattr(value, "to_dict"):
-        return value.to_dict()
-    if hasattr(value, "__dict__"):
-        return value.__dict__
-    return value
 
 
 def _elements_for_prompt(elements: list[dict[str, Any]]) -> list[dict[str, Any]]:

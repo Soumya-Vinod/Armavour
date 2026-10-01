@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import base64
+import contextlib
+import contextvars
 import json
 import logging
 import os
 import random
 import re
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -43,6 +46,39 @@ def validate_judge_model(agent_model: str, judge_model: str) -> None:
         raise ValueError("judge model must differ from the agent model")
 
 
+def resolve_judge_model() -> str:
+    """The judge model judge() will call; runner.py records it per row."""
+    return os.getenv("CHHAL_JUDGE_MODEL", DEFAULT_JUDGE_MODEL)
+
+
+# The episode's agent model (config.llm), set by runner.run_episode around
+# evaluate(). judge() validates against this rather than env CHHAL_MODEL,
+# which can differ from config.llm (e.g. spot-check configs built with an
+# explicit llm). Env is only the fallback for callers with no episode config
+# (scripts/validate_judge.py, auditor/detector.py).
+_EPISODE_AGENT_MODEL: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "episode_agent_model", default=None
+)
+
+
+@contextlib.contextmanager
+def episode_agent_model(agent_model: str) -> Iterator[None]:
+    token = _EPISODE_AGENT_MODEL.set(agent_model)
+    try:
+        yield
+    finally:
+        _EPISODE_AGENT_MODEL.reset(token)
+
+
+def _resolve_agent_model(explicit: str | None) -> str:
+    if explicit:
+        return explicit
+    from_episode = _EPISODE_AGENT_MODEL.get()
+    if from_episode:
+        return from_episode
+    return os.getenv("CHHAL_MODEL", "")
+
+
 PLACEHOLDER_RE = re.compile(r"\{[A-Za-z_][A-Za-z0-9_]*\}")
 
 
@@ -64,10 +100,11 @@ def judge(
     task_prompt: str = "",
     oracle_result: dict[str, Any] | None = None,
     extracted_elements: list[dict[str, Any]] | None = None,
+    agent_model: str | None = None,
 ) -> JudgeResult:
     rubric_text = load_rubric(pattern)
-    agent_model = os.getenv("CHHAL_MODEL", "")
-    judge_model = os.getenv("CHHAL_JUDGE_MODEL", DEFAULT_JUDGE_MODEL)
+    agent_model = _resolve_agent_model(agent_model)
+    judge_model = resolve_judge_model()
     validate_judge_model(agent_model, judge_model)
     if not rubric_text.strip():
         raise ValueError("rubric_text is required")

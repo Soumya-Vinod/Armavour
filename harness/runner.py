@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import logging
 import os
 import random
+import subprocess
 import time
 import uuid
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
@@ -17,9 +20,11 @@ from litellm.exceptions import RateLimitError
 
 from harness.config import EpisodeConfig, demo_configs, get_localized_instruction, load_task_prompt
 from harness.evaluator import EvaluationResult, evaluate
+from harness.judge import episode_agent_model, resolve_judge_model
 from harness.providers import TPDExhaustedError
 
 DEFAULT_BASE_URL = "http://localhost:5173"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_TIMEOUT_S = 180
 DEFAULT_PRICE_IN = 3.00
 DEFAULT_PRICE_OUT = 15.00
@@ -149,14 +154,15 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                 final_screen = getattr(adapter, "last_screenshot", b"")
                 raw_elements = getattr(adapter, "last_elements", [])
                 extracted_elements = _strip_element_ids(raw_elements)
-                evaluation = evaluate(
-                    page,
-                    config.pattern,
-                    trace,
-                    final_screen,
-                    task_prompt=canonical_task_prompt,
-                    extracted_elements=extracted_elements,
-                )
+                with episode_agent_model(config.llm):
+                    evaluation = evaluate(
+                        page,
+                        config.pattern,
+                        trace,
+                        final_screen,
+                        task_prompt=canonical_task_prompt,
+                        extracted_elements=extracted_elements,
+                    )
             finally:
                 browser.close()
 
@@ -311,7 +317,32 @@ def _base_row(config: EpisodeConfig, run_id: str) -> dict[str, Any]:
         "agent": config.agent,
         "llm": config.llm,
         "seed": config.seed,
+        "code_sha": code_sha(),
     }
+
+
+@functools.lru_cache(maxsize=1)
+def code_sha() -> str | None:
+    """Commit the harness is running from, recorded per row (migration 0006).
+
+    Read-only git; "-dirty" marks uncommitted changes to tracked files, since
+    matrix-full-e1e2 rows were produced partly from uncommitted code. Falls back
+    to ARMAVOUR_CODE_SHA when git is unavailable (e.g. an exported tree).
+    """
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL, timeout=10
+        ).strip()
+        dirty = subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=REPO_ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        ).strip()
+        return f"{sha}-dirty" if dirty else sha
+    except (OSError, subprocess.SubprocessError):
+        return os.getenv("ARMAVOUR_CODE_SHA") or None
 
 
 
@@ -334,6 +365,8 @@ def _success_row(
         "steps": len(trace),
         "judge_flag": evaluation.judge_flag,
         "judge_evidence": evaluation.judge_evidence,
+        # Only set when the judge actually ran (judge_flag is None otherwise).
+        "judge_model": resolve_judge_model() if evaluation.judge_flag is not None else None,
         "trace": trace,
     }
 
@@ -356,6 +389,7 @@ def _crash_row(
         "steps": len(trace),
         "judge_flag": None,
         "judge_evidence": None,
+        "judge_model": None,
         "trace": [*trace, {"exception": f"{type(exc).__name__}: {exc}"}],
         "error_type": type(exc).__name__,
         "error": str(exc),

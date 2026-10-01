@@ -15,6 +15,11 @@ from harness.providers import get_key_pool, is_rate_limit_error
 
 logger = logging.getLogger(__name__)
 
+# Attributes browser-use serializes into the model's DOM view. browser-use's
+# DEFAULT_INCLUDE_ATTRIBUTES contains "id" (browser_use/dom/views.py), and
+# testbed element ids can name the manipulation, so "id" is deliberately absent.
+MODEL_VISIBLE_ATTRIBUTES = ["type", "name", "role", "aria-label", "placeholder", "value", "href"]
+
 
 @dataclass
 class Adapter:
@@ -49,8 +54,11 @@ class Adapter:
         browser_use = _load_browser_use()
         show_progress = os.getenv("CHHAL_PROGRESS") == "1"
 
-        full_task = f"{task}\n\nStart Page URL: {target_url}" if target_url else task
-        initial_actions = [{"navigate": {"url": target_url, "new_tab": False}}] if target_url else None
+        # The episode URL carries ?pattern=&intensity= and must not be model-visible:
+        # it is not put in the task text, and the harness navigates the session
+        # before the agent starts instead of via initial_actions (whose
+        # "Navigated to <url>" result is fed back to the model as step-0 memory).
+        full_task = task
 
         is_headless = os.getenv("CHHAL_HEADLESS", "1") != "0"
         session = browser_use.BrowserSession(headless=is_headless, keep_alive=True)
@@ -86,9 +94,9 @@ class Adapter:
                 use_thinking=False,
                 include_tool_call_examples=False,
                 max_clickable_elements_length=12000,
-                include_attributes=["id", "type", "name", "role", "aria-label", "placeholder", "value", "href"],
+                include_attributes=MODEL_VISIBLE_ATTRIBUTES,
                 extend_system_message=extend_msg,
-                initial_actions=initial_actions,
+                directly_open_url=False,
             )
         else:
             llm_kwargs: dict[str, Any] = {"temperature": 0}
@@ -105,8 +113,8 @@ class Adapter:
                 use_thinking=False,
                 include_tool_call_examples=False,
                 max_clickable_elements_length=12000,
-                include_attributes=["id", "type", "name", "role", "aria-label", "placeholder", "value", "href"],
-                initial_actions=initial_actions,
+                include_attributes=MODEL_VISIBLE_ATTRIBUTES,
+                directly_open_url=False,
             )
 
         async def on_step_start(step_agent: Any) -> None:
@@ -139,6 +147,11 @@ class Adapter:
                 logger.debug("browseruse: early oracle check: %s", exc)
 
         try:
+            if target_url:
+                # start() is idempotent (browser_use 0.13.4 BrowserSession.on_BrowserStartEvent),
+                # so agent.run() reuses this already-navigated session.
+                await session.start()
+                await session.navigate_to(target_url)
             history = await agent.run(
                 max_steps=self.max_steps,
                 on_step_start=on_step_start,

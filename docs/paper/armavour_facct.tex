@@ -1,38 +1,23 @@
-\documentclass[conference]{IEEEtran}
-\IEEEoverridecommandlockouts
+%% ACM FAccT submission version of armavour_paper.tex (generated mechanically;
+%% armavour_paper.tex remains the master copy). Anonymous review build.
+\documentclass[sigconf,review,anonymous]{acmart}
 
-\usepackage{cite}
-\usepackage{amsmath,amssymb,amsfonts}
-\usepackage{algorithmic}
-\usepackage{graphicx}
-\usepackage{textcomp}
-\usepackage{xcolor}
 \usepackage{booktabs}
-\usepackage{url}
 
-\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
-    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+%% TODO(ACM): set \acmConference / \acmYear / \setcopyright from the FAccT
+%% call for papers; add CCS concepts (\begin{CCSXML} ... \ccsdesc) before submission.
+\setcopyright{none}
 
 \begin{document}
 
-\title{Armavour: A CCPA-Grounded Agent Dark-Pattern Benchmark\\and Five
-Measurement-Validity Failures\\
-\thanks{Work conducted at Vivekanand Education Society's Institute of
-Technology, Mumbai.}}
+\title{Armavour: A CCPA-Grounded Agent Dark-Pattern Benchmark and Five
+Measurement-Validity Failures}
 
-\author{
-\IEEEauthorblockN{Soumya Vinod}
-\IEEEauthorblockA{\textit{Department of Computer Applications} \\
-\textit{Vivekanand Education Society's Institute of Technology}\\
-Mumbai, India}
-\and
-\IEEEauthorblockN{Chinmay Wankhede}
-\IEEEauthorblockA{\textit{Department of Computer Applications} \\
-\textit{Vivekanand Education Society's Institute of Technology}\\
-Mumbai, India}
-}
-
-\maketitle
+\author{[anonymized]}
+\affiliation{%
+  \institution{[anonymized]}
+  \city{[anonymized]}
+  \country{[anonymized]}}
 
 \begin{abstract}
 Language model agents increasingly transact on the web on a user's
@@ -62,11 +47,9 @@ give the detection signature for each and argue all five generalise
 beyond this benchmark.
 \end{abstract}
 
-\begin{IEEEkeywords}
-dark patterns, LLM agents, computer-use agents, benchmark, measurement
-validity, construct validity, consumer protection, multilingual
-evaluation, AI safety
-\end{IEEEkeywords}
+\keywords{dark patterns, LLM agents, computer-use agents, benchmark, measurement validity, construct validity, consumer protection, multilingual evaluation, AI safety}
+
+\maketitle
 
 \section{Introduction}
 
@@ -538,7 +521,7 @@ deceptions rise sharply as the interface and instruction are localised
 \begin{table}[htbp]
 \caption{Deceptions in the \emph{control} condition, where no
 manipulation is present ($n = 50$ per row)}
-\begin{center}
+\centering
 \begin{tabular}{llr}
 \toprule
 \textbf{Instruction} & \textbf{Interface} & \textbf{``Deceived''} \\
@@ -551,7 +534,6 @@ Hinglish & Hinglish & 7 \\
 \bottomrule
 \end{tabular}
 \label{tab:controlfail}
-\end{center}
 \end{table}
 
 In the fully-Hindi arm, 42\% of episodes on an interface containing no
@@ -616,7 +598,7 @@ table.
 
 \begin{table}[htbp]
 \caption{Outcome distribution by arm (scored episodes)}
-\begin{center}
+\centering
 \begin{tabular}{lrrrrr}
 \toprule
 \textbf{Arm} & \textbf{$n$} & \textbf{EC} & \textbf{DC} & \textbf{EF} &
@@ -631,7 +613,6 @@ E2b (Hin.\ instr.)& 150 & 70.0\% & 30.0\% & 0.0\%  & 30.0\% \\
 \bottomrule
 \end{tabular}
 \label{tab:overall}
-\end{center}
 \end{table}
 
 No episode in 1,928 produced a DF outcome; this is a property of the
@@ -646,7 +627,7 @@ Section~\ref{sec:baseline}.
 \begin{table}[htbp]
 \caption{Deception rate by intensity, English instruction
 ($n=100$ per cell)}
-\begin{center}
+\centering
 \begin{tabular}{lrr}
 \toprule
 \textbf{Intensity} & \textbf{E1a} & \textbf{E1b} \\
@@ -658,7 +639,6 @@ Aggressive  & 38\% & 26\% \\
 \bottomrule
 \end{tabular}
 \label{tab:intensity}
-\end{center}
 \end{table}
 
 The gradient is monotonic in both architectures and causal in the strict
@@ -679,7 +659,7 @@ difference through that adapter.
 \begin{table}[htbp]
 \caption{Deception rate by pattern and architecture ($n=40$ per cell,
 English instruction). $^\star$Judge-adjusted; raw rate 2.5\%.}
-\begin{center}
+\centering
 \begin{tabular}{lrr}
 \toprule
 \textbf{Pattern} & \textbf{E1a} & \textbf{E1b} \\
@@ -702,7 +682,6 @@ False urgency             & --- & --- \\
 \bottomrule
 \end{tabular}
 \label{tab:patterns}
-\end{center}
 \end{table}
 
 Confirm shaming's raw rate under E1a is 2.5\%---a single episode---but
@@ -725,7 +704,7 @@ read alongside Section~\ref{sec:completion}.
 \begin{table}[htbp]
 \caption{Deception rate by language condition ($n=150$ per row).
 $^\dagger$Not interpretable; see Section~\ref{sec:baseline}.}
-\begin{center}
+\centering
 \begin{tabular}{llrr}
 \toprule
 \textbf{Instr.} & \textbf{Interface} & \textbf{DC} &
@@ -740,7 +719,6 @@ Hindi$^\dagger$    & Hindi    & 73.3\% & 21/50 \\
 \bottomrule
 \end{tabular}
 \label{tab:lang}
-\end{center}
 \end{table}
 
 \textbf{Primary result.} With the instruction held in English and only
@@ -767,7 +745,7 @@ not.
 
 \begin{table}[htbp]
 \caption{Language effect by pattern, English instruction ($n=30$)}
-\begin{center}
+\centering
 \begin{tabular}{lrrr}
 \toprule
 \textbf{Pattern} & \textbf{EN} & \textbf{Hinglish} & \textbf{Hindi} \\
@@ -780,7 +758,6 @@ Confirm shaming         & 0.0\%  & 0.0\%  & 0.0\%  \\
 \bottomrule
 \end{tabular}
 \label{tab:langpattern}
-\end{center}
 \end{table}
 
 The effect is concentrated in patterns that already succeed in English.
@@ -978,7 +955,7 @@ benchmarks, not in the incident response path.
 
 Testbed, harness, pattern specifications, judge rubrics, validation
 datasets and analysis code are available at
-\url{https://github.com/Soumya-Vinod/Armavour}. Note the model
+[anonymized]. Note the model
 availability caveat in Section~\ref{sec:limitations}.
 
 \begin{thebibliography}{00}

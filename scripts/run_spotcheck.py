@@ -29,6 +29,7 @@ import signal
 import time
 from typing import Any
 
+from harness.adapters.common import MAX_STEPS
 from harness.config import EpisodeConfig, enumerate_configs
 from harness.providers import get_key_pool
 from harness.runner import run_episode
@@ -107,8 +108,8 @@ def main() -> None:
     parser.add_argument(
         "--max-steps",
         type=int,
-        default=5,
-        help="Maximum step budget per episode (default: 5).",
+        default=MAX_STEPS,
+        help=f"Maximum step budget per episode (default: {MAX_STEPS}, same as the matrix).",
     )
     args = parser.parse_args()
 

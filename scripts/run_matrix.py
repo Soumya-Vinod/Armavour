@@ -40,10 +40,12 @@ import os
 import signal
 import subprocess
 import time
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import select
 
+from harness.adapters.common import MAX_STEPS
 from harness.config import EpisodeConfig, enumerate_configs
 from harness.logger import engine_from_env, episodes_table
 from harness.providers import get_key_pool
@@ -110,9 +112,18 @@ def get_runtime_versions() -> dict[str, str]:
     }
 
 
-def get_batch_name_for_config(config: EpisodeConfig) -> str:
-    """Determine matrix batch classification for a given EpisodeConfig."""
-    if config.llm == "groq/llama-3.1-8b-instant":
+def get_batch_name_for_config(config: EpisodeConfig, *, matrix_model: str = DEFAULT_AGENT_MODEL) -> str:
+    """Determine matrix batch classification for a given EpisodeConfig.
+
+    An explicit `arm` attribute on the config wins. Otherwise any model other
+    than the matrix agent model is a spot-check: previously only the literal
+    llama-3.1-8b-instant string was, so e.g. gpt-oss-20b spot-check rows
+    (en, seed 0-4) were silently classed as E1a.
+    """
+    explicit_arm = getattr(config, "arm", None)
+    if explicit_arm:
+        return str(explicit_arm)
+    if config.llm != matrix_model:
         return "Spotcheck"
     if config.agent == "browseruse":
         return "E1b"
@@ -603,24 +614,18 @@ def export_summary_files(
 
     batch_stats: dict[str, dict[str, int]] = {}
     for row in executed_rows:
-        instr_l = row.get("instruction_language", "en")
-        ui_l = row.get("ui_language", row.get("language", "en"))
-        llm = str(row.get("model", ""))
-        agent = str(row.get("agent", ""))
-        seed = int(row.get("seed", 0))
-
-        if llm == "groq/llama-3.1-8b-instant":
-            b_key = "Spotcheck"
-        elif agent == "browseruse":
-            b_key = "E1b"
-        elif instr_l == "hi" and ui_l == "hi":
-            b_key = "E2a"
-        elif instr_l == "hinglish" and ui_l == "hinglish":
-            b_key = "E2b"
-        elif instr_l == "en" and (ui_l in ("hi", "hinglish") or seed >= 10):
-            b_key = "E2"
-        else:
-            b_key = "E1a"
+        # Same classifier as everywhere else; runner rows carry the model as
+        # "llm" (the old inline copy read "model" and never matched).
+        b_key = get_batch_name_for_config(
+            SimpleNamespace(
+                llm=str(row.get("llm") or row.get("model") or ""),
+                agent=str(row.get("agent", "")),
+                instruction_language=row.get("instruction_language", "en"),
+                ui_language=row.get("ui_language", row.get("language", "en")),
+                seed=int(row.get("seed", 0)),
+                arm=row.get("arm"),
+            )
+        )
 
         if b_key not in batch_stats:
             batch_stats[b_key] = {"completed": 0, "ec": 0, "dc": 0, "ef": 0, "df": 0, "crash": 0}
@@ -685,7 +690,7 @@ def filter_configs_by_batch(configs: list[EpisodeConfig], batch_arg: str) -> lis
 
     Supported batch tokens (comma-separated or single):
       - 'e1a': computeruse English baseline (480 episodes)
-      - 'spotcheck' / 'spot_check': Cross-model spot-check with llama-3.1-8b-instant (60 episodes)
+      - 'spotcheck' / 'spot_check': Cross-model spot-check, any model other than the matrix agent model (60 episodes)
       - 'e1b': browseruse English baseline (480 episodes)
       - 'e1': Combined E1a + E1b English baselines (960 episodes)
       - 'e2': E2 Multilingual arms (English instruction -> hi/hinglish UI) (540 episodes)
@@ -746,8 +751,8 @@ def main() -> None:
     parser.add_argument(
         "--max-steps",
         type=int,
-        default=5,
-        help="Maximum step budget per episode (default: 5).",
+        default=MAX_STEPS,
+        help=f"Maximum step budget per episode (default: {MAX_STEPS}, the budget E1a ran under).",
     )
     args = parser.parse_args()
 
