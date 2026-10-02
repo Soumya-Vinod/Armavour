@@ -26,6 +26,20 @@ logger = logging.getLogger(__name__)
 # (the matrix-era F6 leak). Off unless set to exactly "1"; scripts/run_matrix.py
 # and scripts/run_spotcheck.py refuse to start while it is set at all.
 CONFIG_LEAK_ENV = "CHHAL_ABLATION_LEAK_CONFIG"
+# Opt-in sampling temperature (corrected rerun: scripts/run_rerun.py sets 0.7 so
+# the seeds of a cell are sampling replicates). Unset = 0, the greedy setting
+# every earlier runner used, so their behaviour is unchanged.
+TEMPERATURE_ENV = "CHHAL_TEMPERATURE"
+
+
+def sampling_temperature() -> float:
+    raw = os.getenv(TEMPERATURE_ENV)
+    if raw is None or raw.strip() == "":
+        return 0
+    value = float(raw)
+    if not 0.0 <= value <= 2.0:
+        raise ValueError(f"{TEMPERATURE_ENV} must be within [0, 2], got {raw!r}")
+    return value
 
 
 def config_leak_enabled() -> bool:
@@ -74,12 +88,14 @@ class Adapter:
         self.completion_responses: list[Any] = []
         self.last_screenshot: bytes = b""
         self.last_elements: list[dict[str, Any]] = []
+        self.terminal_reason: str | None = None
 
     def run(self, page: Page, task: str, config: Any) -> tuple[list[dict[str, Any]], int, int]:
         if not self.model:
             raise RuntimeError("CHHAL_MODEL is required to run the computeruse adapter")
 
         show_progress = os.getenv("CHHAL_PROGRESS") == "1"
+        self.terminal_reason = None
         self.completion_responses = []
         self.provider_latency_seconds = 0.0
         trace: list[dict[str, Any]] = []
@@ -147,9 +163,13 @@ class Adapter:
                 raise
 
         if terminal_reason is None and trace:
-            terminal_reason = "normal_completion"
+            # The loop only falls through when every step was used without a
+            # terminal action or an oracle result, so this is a step-cap stop,
+            # not a completion (scoring v2 counts it as "no completion signal").
+            terminal_reason = "step_cap"
             trace[-1]["terminal_reason"] = terminal_reason
-            logger.info("Normal agent completion")
+            logger.info("Step budget exhausted without a terminal action")
+        self.terminal_reason = terminal_reason
 
         # Not part of Contract 5 return signature.
         # Accessed by evaluator.py via adapter.last_screenshot after run().
@@ -185,7 +205,7 @@ class Adapter:
             # F6 ablation arm only (scripts/run_leak_ablation.py --arm on): re-inject
             # the matrix-era payload so its effect can be measured.
             prompt["config"] = config.to_dict()
-        # Deterministic inference settings: temperature=0 enforces greedy sampling.
+        # Temperature 0 (greedy) unless CHHAL_TEMPERATURE opts in (see sampling_temperature).
         # Backend provider seed parameters are passed where supported by LiteLLM backends.
         t0 = time.time()
         qwen = _is_qwen_model(self.model)
@@ -195,7 +215,7 @@ class Adapter:
         messages = [{"role": "user", "content": json.dumps(prompt, sort_keys=True)}]
         base_kwargs = {
             "model": self.model,
-            "temperature": 0,
+            "temperature": sampling_temperature(),
             "max_tokens": max_tokens,
             "drop_params": True,
             "timeout": timeout,

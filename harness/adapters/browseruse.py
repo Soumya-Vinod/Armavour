@@ -30,6 +30,7 @@ class Adapter:
         self.model = self.model or os.getenv("CHHAL_MODEL")
         self.completion_responses: list[Any] = []
         self.last_screenshot: bytes = b""
+        self.terminal_reason: str | None = None
 
     def run(self, page: Page, task: str, config: Any) -> tuple[list[str], int, int]:
         if not self.model:
@@ -40,6 +41,7 @@ class Adapter:
         history, oracle = _run_in_thread(self._run_browseruse(task, config, trace, target_url=target_url))
         trace.extend(_trace_from_history(history))
         in_tokens, out_tokens = _usage_tokens(history)
+        self.terminal_reason = _terminal_reason(history, oracle, self.max_steps)
         if oracle is not None:
             _copy_oracle_to_runner_page(page, oracle)
         return trace, in_tokens, out_tokens
@@ -180,6 +182,20 @@ class Adapter:
         except Exception as exc:  # noqa: BLE001 - screenshot is best-effort evidence.
             self.last_screenshot = b""
             logger.warning("browseruse: screenshot capture failed: %s", exc)
+
+
+def _terminal_reason(history: Any, oracle: dict[str, Any] | None, max_steps: int) -> str:
+    """Same vocabulary as the computeruse adapter (stored per row since migration 0007)."""
+    if oracle is not None:
+        return "normal_completion"
+    try:
+        if history is not None and history.is_done():
+            return "explicit_done"
+        if history is not None and history.number_of_steps() >= max_steps:
+            return "step_cap"
+    except Exception:  # noqa: BLE001 - a partial history must not fail the episode.
+        pass
+    return "silent_stop"
 
 
 def _run_in_thread(coro: Any) -> Any:

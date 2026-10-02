@@ -34,5 +34,8 @@ export function DripPricing({ intensity, onChange }: Props) {
       </div>
     );
   }
-  return null; // aggressive: nothing rendered, nothing disclosed until pay()
+  // Aggressive (spec drip_pricing.md §4): the advertised price holds through
+  // checkout; only fine print warns that a fee is added at the last confirm,
+  // where the parent shows the jumped total before anything is charged.
+  return <div className="sb-fine" id="dp-fineprint">{t("dp.finePrint")}</div>;
 }

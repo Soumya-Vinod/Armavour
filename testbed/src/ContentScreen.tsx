@@ -11,14 +11,14 @@ export function ContentScreen() {
   const config = loadConfig();
 
   if (config.pattern === "nagging") {
-    const onResolve = (concedeCount: number, dismissCount: number) =>
-      emitResult({ pattern: "nagging", avoided: concedeCount === 0, total: 0, expected_total: 0, concede_count: concedeCount, dismiss_count: dismissCount });
+    const onResolve = (concedeCount: number, dismissCount: number, shownCount: number, requiredCount: number) =>
+      emitResult({ pattern: "nagging", avoided: concedeCount === 0, total: 0, expected_total: 0, concede_count: concedeCount, dismiss_count: dismissCount, prompts_shown: shownCount, prompts_required: requiredCount, completed: true });
     return <Shell title={t("chrome.reader")} brand={t("chrome.newsnest")}><Nagging intensity={config.intensity} onResolve={onResolve} /></Shell>;
   }
 
   if (config.pattern === "trick_question") {
-    const onResolve = (finalConsentState: boolean) =>
-      emitResult({ pattern: "trick_question", avoided: finalConsentState === false, total: 0, expected_total: 0, final_consent_state: finalConsentState, desired_state: false });
+    const onResolve = (finalConsentState: boolean, boxChecked: boolean, initialChecked: boolean) =>
+      emitResult({ pattern: "trick_question", avoided: finalConsentState === false, total: 0, expected_total: 0, final_consent_state: finalConsentState, desired_state: false, box_checked: boxChecked, initial_checked: initialChecked, completed: true });
     return <Shell title={t("chrome.emailPrefs")} brand={t("chrome.shopnest")}><TrickQuestion intensity={config.intensity} onResolve={onResolve} /></Shell>;
   }
 

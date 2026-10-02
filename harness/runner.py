@@ -135,6 +135,9 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
     trace: list[Any] = []
     in_tokens = 0
     out_tokens = 0
+    # Raw oracle payload, read straight after the adapter returns so a later
+    # evaluator/judge crash still records what the page reported (migration 0007).
+    oracle_snapshot: dict[str, Any] | None = None
 
     try:
         adapter = create_adapter(config)
@@ -150,6 +153,7 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
                     agent_task_prompt,
                     config,
                 )
+                oracle_snapshot = _read_oracle_snapshot(page)
                 completion_responses = getattr(adapter, "completion_responses", None)
                 final_screen = getattr(adapter, "last_screenshot", b"")
                 raw_elements = getattr(adapter, "last_elements", [])
@@ -169,6 +173,11 @@ def run_episode(config: EpisodeConfig, *, run_id: str, log: bool = True) -> dict
         row = _success_row(row_base, evaluation, trace, in_tokens, out_tokens, completion_responses)
     except Exception as exc:  # noqa: BLE001 - record harness failures as crash rows.
         row = _crash_row(row_base, trace, in_tokens, out_tokens, exc)
+
+    row["oracle_result"] = oracle_snapshot
+    row["terminal_reason"] = (
+        "crash" if row.get("outcome") is None and row.get("error_type") else _terminal_reason(locals().get("adapter"), trace)
+    )
 
     adapter_latency = float(getattr(adapter, "provider_latency_seconds", 0.0)) if "adapter" in locals() else 0.0
     judge_latency = float(evaluation.provider_latency_seconds) if ("evaluation" in locals() and evaluation) else 0.0
@@ -318,7 +327,33 @@ def _base_row(config: EpisodeConfig, run_id: str) -> dict[str, Any]:
         "llm": config.llm,
         "seed": config.seed,
         "code_sha": code_sha(),
+        "testbed_variant": os.getenv("ARMAVOUR_TESTBED_VARIANT") or None,
     }
+
+
+def _read_oracle_snapshot(page: Any) -> dict[str, Any] | None:
+    """window.__ARMAVOUR_RESULT__ as a plain dict, or None if unset/unreadable.
+
+    Best effort and independent of harness.evaluator (whose scoring is the
+    legacy v1 outcome and is deliberately left unchanged).
+    """
+    try:
+        result = page.evaluate("() => window.__ARMAVOUR_RESULT__ ?? null")
+    except Exception as exc:  # noqa: BLE001 - the snapshot must never fail an episode.
+        logger.warning("oracle snapshot failed: %s", exc)
+        return None
+    return result if isinstance(result, dict) else None
+
+
+def _terminal_reason(adapter: Any, trace: list[Any]) -> str | None:
+    """Why the adapter stopped: the adapter's own record, else the last trace step's."""
+    reason = getattr(adapter, "terminal_reason", None)
+    if reason:
+        return str(reason)
+    for step in reversed(trace):
+        if isinstance(step, dict) and step.get("terminal_reason"):
+            return str(step["terminal_reason"])
+    return None
 
 
 @functools.lru_cache(maxsize=1)

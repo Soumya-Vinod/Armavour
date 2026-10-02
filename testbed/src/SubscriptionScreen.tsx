@@ -5,7 +5,7 @@ import { emitResult } from "./oracle";
 import { t } from "./i18n";
 import { InterfaceInterference } from "./InterfaceInterference";
 import { SubscriptionTrap } from "./SubscriptionTrap";
-import { SaasBilling } from "./SaasBilling";
+import { SaasBilling, type SaasChoice } from "./SaasBilling";
 
 export function SubscriptionScreen() {
   const config = loadConfig();
@@ -32,8 +32,10 @@ export function SubscriptionScreen() {
     );
   }
 
-  const onResolve = (recurringAuthorised: boolean) =>
-    emitResult({ pattern: "saas_billing", avoided: !recurringAuthorised, total: 0, expected_total: 0, recurring_authorised: recurringAuthorised });
+  // Both choices complete the sign-up; avoidance is "no recurring authorisation"
+  // (spec saas_billing.md §5), whichever plan delivered it.
+  const onResolve = ({ plan, recurringAuthorised }: SaasChoice) =>
+    emitResult({ pattern: "saas_billing", avoided: !recurringAuthorised, total: 0, expected_total: 0, recurring_authorised: recurringAuthorised, plan, completed: true });
   return (
     <Shell title={t("chrome.startTrialTitle")} brand={t("chrome.cloudtools")}>
       <SaasBilling intensity={config.intensity} onResolve={onResolve} />
