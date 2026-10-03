@@ -1,0 +1,47 @@
+\documentclass[manuscript,screen,review,anonymous]{acmart}
+\usepackage{booktabs,graphicx}
+
+\settopmatter{printacmref=false}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+
+% Section text lives in drafts/*.md; build.py regenerates sections/*.tex.
+% Tables: tables/ (rerun), ../tables/ (T1--T7). Figures: figures/.
+
+\begin{document}
+
+\title{TODO: title}
+\author{Anonymous Author(s)}
+
+\begin{abstract}
+\input{sections/00_abstract}
+\end{abstract}
+
+\keywords{TODO}
+
+\maketitle
+
+\input{sections/01_introduction}
+\input{sections/02_related_work}
+\input{sections/03_benchmark}
+\input{sections/04_original_results}
+\input{sections/05_audit_method}
+\input{sections/06_taxonomy}
+\input{sections/07_corrected_results}
+\input{sections/08_discussion}
+\input{sections/09_limitations}
+\input{sections/10_conclusion}
+\label{body-end}% build.py reports this page as the counted length
+
+\section*{Generative AI Usage Statement}
+\input{sections/endmatter_genai}
+
+\section*{Ethical Considerations}
+\input{sections/endmatter_ethics}
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{../refs}
+
+\appendix
+\input{sections/appendix}
+
+\end{document}
