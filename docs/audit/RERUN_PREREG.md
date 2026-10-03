@@ -1,13 +1,12 @@
 # RERUN PRE-REGISTRATION: corrected rerun, baseline vs fixed testbed (qwen, T = 0.7)
 
-**Status: DRAFT, for the author to review and freeze.** No episode of the main run has been executed.
-- To freeze, add the date and the commit hash below. Do not edit after the first main-run episode; any later change goes under "Deviations", with its reason.
-- The Phase 6 smoke test (2 episodes, run_ids `rerun-smoke-*`) is not part of the data.
+**Status: FROZEN.** The plan in §1–§7 is unchanged from commit `43d5660`, the code commit the run executed against. The freeze fields below were filled in after the run (see Deviation 1). Everything that departed from the plan is listed under Deviations.
+- The Phase 6 smoke test (2 episodes) is not part of the data.
 
 | | |
 |---|---|
-| Frozen on | _(date — author)_ |
-| Commit | _(hash — author)_ |
+| Frozen on | 2 October 2026 (plan registered on OSF at [time, date], before any analysis; freeze fields filled in on 3 October 2026, see Deviation 1) |
+| Commit | `43d5660` (code and plan text as executed) |
 | Analysis script | `scripts/analyze_rerun.py` (validated on synthetic data, `tests/test_analyze_rerun.py`) |
 
 ## 1. Question
@@ -138,4 +137,9 @@ All 40 cells: Fisher's exact test on deceived vs not, with raw p and Holm-adjust
 
 ## Deviations
 
-_(none yet)_
+1. **Late freeze commit.** The freeze fields (date, commit) were filled in and committed after the run, because the run guard refuses to start or continue when the code commit changes. The plan text was registered on OSF at [time, date], before any analysis, and §1–§7 above are identical to the version at commit `43d5660`.
+2. **Outcomes visible during the run.** The run console prints each episode's v1 outcome, and the author saw these while monitoring for crashes. In addition, one diagnostic database query mid-run displayed the outcomes and oracle results of the 10 baseline subscription_trap aggressive episodes, to investigate their step counts (Deviation 5). The analysis plan was not changed in response to either.
+3. **Crashes from a provider key failure.** On 2 October around 19:09–19:10 IST, a failing API key caused a short series of crash rows (confirm_shaming subtle). The run was stopped and resumed at about 20:38 IST, and every crashed config was re-attempted. Final crash count: 0 in both variants.
+4. **Pause for the provider's daily limit.** At about 410 of 800 episodes (22:03 IST, 2 October), both API keys reached the provider's daily token limit and the run halted itself. It resumed after the limit reset on 3 October at about 09:03 IST and completed at 10:42 IST. Model, judge, temperature and all settings were unchanged.
+5. **Truncated traces after rate-limit retries.** When a model call hit the provider's per-minute rate limit and was retried, the agent loop restarted with an empty trace and step counter, while the browser kept its state. These episodes keep a valid final oracle state, so outcome analyses are unaffected. Their stored traces and step counts are truncated, and their step budget was effectively reset, which makes a step-cap stop (NC) slightly less likely for them. Affected episodes are identified by duration > 40 s, cross-checked against rate_limit_retry log events: **6 baseline, 15 fixed**. The asymmetry follows from the fixes: the nagging overlay and the drip-pricing and saas confirmation screens add steps, so the fixed variant makes more model calls and hits the per-minute limit more often. These episodes are flagged in any trace-based analysis.
+6. **Smoke-test run_ids.** The smoke test wrote to `smoke-rerun-01-baseline` and `smoke-rerun-01-fixed` rather than `rerun-smoke-*` as stated above, to avoid a key collision between the two variants. Smoke rows are not part of the data either way.
