@@ -11,3 +11,18 @@ logs/
 results/
 .checkpoints/
 debug_evidence/
+
+# caches (repo cleanup 2026-10-03)
+.pytest_cache/
+.ruff_cache/
+**/.vite/
+
+# LaTeX build output
+docs/paper/**/*.aux
+docs/paper/**/*.log
+docs/paper/**/*.out
+docs/paper/**/*.bbl
+docs/paper/**/*.blg
+docs/paper/**/*.fls
+docs/paper/**/*.fdb_latexmk
+docs/paper/**/*.synctex.gz

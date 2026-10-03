@@ -1,9 +1,9 @@
 # Investigation: two E1b (browseruse) anomalies
 
-**Status:** Diagnostic only, per `docs/claude_code_prompt.md` Task 5. No code
+**Status:** Diagnostic only, per `docs/archive/prompts/claude_code_prompt.md` Task 5. No code
 changed. Written by Claude Code, 2026-08-16.
 
-**Scope note, same as `docs/ef_df_analysis.md`:** I don't have `DATABASE_URL`
+**Scope note, same as `docs/archive/diagnostics_2026-08/ef_df_analysis.md`:** I don't have `DATABASE_URL`
 configured in this environment, and there's no live testbed/LLM access here
 either, so I could not pull the actual 48 EF traces or the 5 control-DC rows
 and inspect them directly, which is what this investigation really calls for.
@@ -61,7 +61,7 @@ is swallowed here and turned into a normal, non-raising return of
 `(history_so_far, None)`. `Adapter.run()` then returns that trace/oracle pair
 to `run_episode()` looking exactly like a clean, no-exception episode. Because
 `oracle` is `None`, `placed=False` downstream, and per the
-`docs/ef_df_analysis.md` finding, an unplaced episode with any recorded
+`docs/archive/diagnostics_2026-08/ef_df_analysis.md` finding, an unplaced episode with any recorded
 actions in its trace is unconditionally scored `avoided=True` → **EF**.
 
 **This is a real, code-confirmed structural asymmetry**: a class of failure

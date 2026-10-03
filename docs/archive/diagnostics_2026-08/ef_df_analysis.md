@@ -1,7 +1,7 @@
 # Investigation: the `avoided` default on the no-oracle path
 
 **Status:** Diagnostic only. No code changed as part of this document — see ground
-rules in `docs/claude_code_prompt.md`. Written by Claude Code at Soumya's request,
+rules in `docs/archive/prompts/claude_code_prompt.md`. Written by Claude Code at Soumya's request,
 2026-08-16.
 
 **Scope note:** I do not have `DATABASE_URL` configured in this environment (`.env`

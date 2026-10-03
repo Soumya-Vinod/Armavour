@@ -25,7 +25,7 @@ changing one. Everything below is either a paper-text correction or an
   reach is the local `armavour-db` Docker container (`localhost:5433`,
   healthy) — it holds 50 rows, all `demo-*`/`rerun-*` run_ids, zero rows
   for `matrix-full-e1e2`. Same limitation the previous session hit and
-  documented in `docs/ef_df_analysis.md` / `docs/e1b_analysis.md`.
+  documented in `docs/archive/diagnostics_2026-08/ef_df_analysis.md` / `docs/archive/diagnostics_2026-08/e1b_analysis.md`.
 - Unrelated but worth flagging: this checkout's `.env` is corrupted — it's
   byte-for-byte identical (same size, same MD5) to
   `docs/GATE3_FINDINGS.md`. No `DATABASE_URL`, no keys, nothing real in

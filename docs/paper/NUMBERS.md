@@ -12,7 +12,7 @@ Every number in the paper must appear here; the `.tex` carries `% N:<id>` next t
 | F6 | `docs/audit/02_AUDIT_F6_F8.md` |
 | SR | `SPRINT_REPORT.md`, removed from the working tree in commit `5266063`; read with `git show 5266063^:SPRINT_REPORT.md` |
 | ST | `ARMAVOUR_STATUS_REPORT.md`, removed in `156682a`; read with `git show 156682a^:ARMAVOUR_STATUS_REPORT.md` |
-| PT | `docs/paper/armavour_paper.tex` (the earlier draft, i.e. the original claims) |
+| PT | `docs/archive/paper_ieee/armavour_paper.tex` (the earlier draft, i.e. the original claims) |
 | G3 | `docs/GATE3_FINDINGS.md` |
 | IA | `docs/identifier_audit.md` |
 | ABL | `results/ablation/*.csv` |
@@ -251,7 +251,7 @@ Every number in the paper must appear here; the `.tex` carries `% N:<id>` next t
 | PROV-burst | 172 rows in 20 s, 7,602 s of recorded duration | bulk-written E1b block | SR §2h bursts table (burst 4) |
 | PROV-ids | 830 | sequence ids missing inside the matrix id span | SR §2j |
 | PROV-bursts | 9 | creation bursts in the matrix run | SR §2h |
-| RET-rows | 52 | crash rows when re-running with the matrix agent model | `results/crashes_ablation-config-01.llama-retired.csv` (52 rows, `model_not_found`) |
+| RET-rows | 52 | crash rows when re-running with the matrix agent model | `results/crashes_ablation-config-01.llama-retired.csv`, tracked copy `docs/audit/evidence/crashes_ablation-config-01.llama-retired.csv` (52 rows, `model_not_found`) |
 | DRIFT-denom | n=135 vs n=45 | denominators silently mixed in a pooled pattern column | PT §V-D; ST §6 |
 
 ## Identifier leakage

@@ -32,14 +32,20 @@ The whole project runs on one unit of work — an **episode**: one agent attempt
 | Path | What lives here |
 |---|---|
 | `testbed/` | React sites, the 12-pattern injection engine, the trilingual strings, the oracle. |
-| `testbed/spike/` | The verified Phase-0 spike (BookMyShow-style ₹1 basket-sneak). |
-| `harness/` | Playwright + LLM agent runner, judge, evaluator, and the zero-API verifier. |
-| `auditor/` | Agent-as-auditor pipeline + field-audit tooling (Phase 5–6). |
-| `analysis/` | DPSR tables, regression, figures. |
-| `infra/` | Docker Compose, Postgres migrations, CI. |
-| `docs/` | Blueprint, execution guide, test spec, taxonomy crosswalk, the five contracts. |
-| `papers/` | Reading notes, extraction sheets, related-work material. |
-| `data/` | Episode logs (gitignored contents). |
+| `testbed/spike/` | The verified Phase-0 spike (BookMyShow-style ₹1 basket-sneak), used by CI. |
+| `harness/` | Playwright + LLM agent runner, adapters, judge, evaluator, logger, and the zero-API verifier. |
+| `auditor/` | Agent-as-auditor pipeline + field-audit tooling. |
+| `infra/migrations/` | Alembic migrations for the Postgres `episodes` table (`0001`–`0007`). Compose file: `docker-compose.yml`; CI: `.github/workflows/ci.yml`. |
+| `scripts/` | Run scripts (`run_matrix.py`, `run_leak_ablation.py`, `run_rerun.py`) and analysis (`analysis.py`, `corrected_tables.py`, `analyze_ablation.py`, `score_v2.py`, `analyze_rerun.py`), plus one-off diagnostics. |
+| `tests/` | pytest suite; integration tests (`-m integration`) need the dev servers. |
+| `data/` | Judge validation samples (other contents gitignored). |
+| `results/`, `logs/` | Run outputs, manifests and logs (gitignored). |
+| `docs/` | The five contracts, decision log, element IDs, oracle fields, rubrics, matrix design, taxonomy crosswalk, identifier audit. |
+| `docs/specs/` | Per-pattern and task specs. |
+| `docs/legal/` | CCPA guidelines, enforcement orders, related-work PDFs. |
+| `docs/audit/` | Audit reports and the corrected rerun; start with `docs/audit/README.md` for the reading order. `evidence/` holds raw outputs the reports cite. |
+| `docs/paper/` | Reference draft (`reference_generated_draft.tex`), `refs.bib`, generated `tables/`, the numbers ledger `NUMBERS.md`. |
+| `docs/archive/` | Superseded material kept for history: the IEEE draft, Aug pilot notes and diagnostics, Phase-0 context and test spec, old prompts, the matrix design proposal, the repo cleanup plan. |
 
 ## Quick start
 

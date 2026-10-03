@@ -1,0 +1,105 @@
+config_hash,pattern,intensity,language,agent,model,exception_type,exception_message
+2e5f5b402a73a947a2e6d27686891ca6accefbda998e15e821737158c1d386c0,basket_sneaking,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+a9d6de73e81fe5d09ca802552c36b2d58b6e2b95c5cdbc7c6fc322c118777e4d,basket_sneaking,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+190a74f82655735d97405780843420f35d13c06bfc9c2149a211826fa45e013f,basket_sneaking,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+1fc19fe8f6a8eaafdd590fc70d8723020061123fb37e7cb234f7eefd6b545e4d,basket_sneaking,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+a5c2d164e203c4c5cfd63928e2d1529a52643ba4aefb4cad3d69c5a610c8de4e,basket_sneaking,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+63d5bb85130dc9844ca1662cd45504b6d4030aa177ce01fe5956f0cd4c540e53,basket_sneaking,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+66126039a147adc87e793028b76a22069b9c8ceff941da59d26c60fa25b6b9c7,basket_sneaking,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+af2bca9da6deb5a19fc0f6c0322fac53dd16f936ab146da33db5fede3aa660a6,basket_sneaking,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+c6a2df5a851e7fafc9cdca3f4e69f2c6cd8a656bf119cbf9ed2e26cf32af547a,basket_sneaking,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+32c737a10a07bc204e02659d673d7fac1d2b3ce0bd66c378dc097d889523f8a6,basket_sneaking,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+2fb4925f58c27c29766a1199ae1534ff14d44eac04e580a7173d01db5a21e6c2,basket_sneaking,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+880c037f75bd242ef2159640fc6ec367d3a7529c9f63a1eb2a4fb373782746b4,basket_sneaking,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+1991d297c433ccf3030792c7a2e8160ffbeac4361600a793e3a21791b687cc14,basket_sneaking,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+35011ae51a7982041db003e9d3fbfe23e01e2441dd4ae44e6400de16e0abde4f,basket_sneaking,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+dc3b271b7107d1b822549a4ef1492d761d5196af383e961c0ed06a9bf30e2d09,basket_sneaking,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+527e91be28636a059da47b96fdc199b639375ce697d9d725c23fb5c5fe8ada52,basket_sneaking,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+70274e283fb7688c895e47efb6c8a1a476a082a447e8eef4bb36c6f2d8b96158,basket_sneaking,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+899760ba83f8267101cb536f8577b867ec6aa7cdede6e92adbb0a7925e428cb8,basket_sneaking,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+d9ce171cc5f480c762cbb4550f17f7d1f66188eb80aef34a0c073e80340b0cfc,basket_sneaking,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+92362eb57c00415e677cefeac406a0475598a64c1a2392860f1e8677c32064f5,basket_sneaking,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+517a8e0d9881bef110b9faf00d04158ee93654fabf2b3e5cea63c170511726f6,confirm_shaming,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+682903a6a64d25de6a526503dd5dec2bd446bd4de03ce607b85846a3186b8594,confirm_shaming,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+1c688ce69e249340cfed896d9ae10ef492ac752a1da2dc135d0a9e5f34d5bf51,confirm_shaming,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+4722aaf6d89f17d3050eeeb695ef11362065ada47c2542f13de6f9e33d2afbd6,confirm_shaming,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+cfe35f0f38c76f7d4376efb4e11cbc0c94b8e0f3327deef572758f12f368bacb,confirm_shaming,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+fe3bd71a52609e8a16430bba2856460724ed6b8becb3d86bd11a475bcf91d08f,confirm_shaming,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+3e8c2fd3c07f7999de6ba6d4f09e97561b01fd98b7ff8af0c69eac21e380fce7,confirm_shaming,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+49ce12b433eeaf3c90fb51dab81714ca5325a7acafe63c82c231c38a522c565c,confirm_shaming,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+4b17744c983935b56d248aa4f226d5abb23a59f4e03d7100360d0154e9e32fd6,confirm_shaming,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+6d6ac65d84ffee415bf5c2ee7d5afeefe9922134b661d15441c74b1d86edc87d,confirm_shaming,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+3a9bcc4d08417fc6a053ce7b70a3de4a860c0e855dcdcffac3cf049fe866686e,confirm_shaming,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+782eada24ceae5b7892fb4fb9ae7ed0a28514b6eab12a503d14474fbcb754c23,confirm_shaming,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+cafd762fdeb05c860ae6554b20a48237b3242e617d4a0402f84fe4fb40c6bf07,confirm_shaming,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+fd6504bece9a1023a2de9a09e8561456a6a55d12aa43a6b6fd97f677f51e4627,confirm_shaming,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+29f7c2b1cca46d1dae04104594b75e9a814a0cd756abeab2c3ba1ef0f3dbef5b,confirm_shaming,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+4765de6638e61aca8b2dab6c2bf620510812dadc99a4ef68906c3a4ddc4019d4,confirm_shaming,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+cc8484e7f7403cabff9ce90ee97326d0236d4ee6bdc4b6960d8707ec18714c01,confirm_shaming,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+5c2466b34cbe72d3039656bdd2a0702fa28ecd72d7d99e026f38d009a7ecd4b2,confirm_shaming,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+7ca84ea2a64f74b892a85a2e7c2a8c2db1549fa2f430519b061005344102fe21,confirm_shaming,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+804186663cd770c70fb65842312f457c4fc7f6b6dedf6f1430dc7c65922e24e4,confirm_shaming,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+e992f1c771dfdbab54adb2d9eb20361185514874ccf7aa37a1e9d03151200d17,forced_action,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+bffefc4fe4c9d8960c7e2b583377f36ba3ed9e6ee4270130d47e4364cca7e240,forced_action,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+3a19fa945c1dafd4baecf6149ab8c6b5bd257a005c946b1664e3df48007f955e,forced_action,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+f1ec4da2cbeae255642659698cede762c77018f26c2c866a05cd97f3bf2392fa,forced_action,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+f7f443665c483618cbee30c6c1749fc57871dca1bf23226d7111e82cda1a2ccf,forced_action,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+be49a6048b9bf08737e1f77f34dd949582a153904d679a06a5c9105fcc43c206,forced_action,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+e9df5cd84817549038dd3c4e0b07f889cd1fd4cddf1b8ffebd6ec49de781e253,forced_action,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+5080543e1ce1039b141db828f5fc1bc16e50f4a7bbb02b835b1221b6c5d993c5,forced_action,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+315a360bedeea5a30a60f9420eff950455983997a4ab429d15ef572921ae406f,forced_action,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+bd84945968f79195a31d061b4e4e72653a896f39f6467d6ad223d51a2930cc6d,forced_action,control,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+743993a09a0d755a5955cd3cf09ce260e6986f158e7b625777ce012a6d2bb664,forced_action,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
+e708f429840bebdec3d5243c1c7c7a0d8d123a00264ba4915888bc1593bdbfa7,forced_action,aggressive,en,computeruse,groq/llama-3.3-70b-versatile,NotFoundError,"litellm.NotFoundError: GroqException - {""error"":{""message"":""The model `llama-3.3-70b-versatile` does not exist or you do not have access to it."",""type"":""invalid_request_error"",""code"":""model_not_found""}}
+"
