@@ -297,7 +297,7 @@ def test_subscription_trap_detects_in_subscription_flow() -> None:
         AuditStep(
             step_index=i,
             url=f"http://service.local/cancel_step{i}",
-            dom_snapshot=f"<html><body><h1>Manage Subscription</h1><p>Monthly billing: Rs 199/mo</p><button>Cancel subscription</button></body></html>",
+            dom_snapshot="<html><body><h1>Manage Subscription</h1><p>Monthly billing: Rs 199/mo</p><button>Cancel subscription</button></body></html>",
             screenshot=b"img",
             action_taken={"action": "click"},
             reasoning=f"Cancel step {i}",
