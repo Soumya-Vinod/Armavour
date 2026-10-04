@@ -83,6 +83,18 @@ def test_cu_box_state_replay():
     assert st["checked"] is False and st["touched"] is True
 
 
+def test_cu_box_state_honour_false_and_detector():
+    t = [_step("check", 0, False), _step("click", 1)]
+    assert ra.cu_box_state(t)["checked"] is True  # as executed: handle.check() ignores value
+    assert ra.cu_box_state(t, honour_false=True)["checked"] is False
+    assert ra.cu_box_state([_step("check", 0, True), _step("click", 1)], honour_false=True)["checked"] is True
+    assert ra.cu_box_state([_step("check", 0), _step("click", 1)], honour_false=True)["checked"] is True  # value None
+    assert ra.has_check_false(t)
+    assert not ra.has_check_false([_step("check", 0), _step("uncheck", 0, False)])
+    assert not ra.has_check_false([_step("check", 3, False)])  # not the checkbox element
+    assert ra.box_sequence(t) == "check(value=False)"
+
+
 @pytest.mark.parametrize("intensity,checked,original,rendered", [
     ("control", True, True, True), ("control", False, False, False),
     ("subtle", True, True, True), ("subtle", False, False, False),
@@ -145,3 +157,18 @@ def test_deny_terms_ignores_comments(tmp_path):
     f.write_text("# comment\nAcme Univ\n\n  Foo  \n", encoding="utf-8")
     assert ex.deny_terms(f) == ["Acme Univ", "Foo"]
     assert ex.deny_terms(tmp_path / "missing.txt") == []
+
+
+def test_m4_side_by_side_keeps_changed_and_forced_rows():
+    import pandas as pd
+    old = pd.DataFrame({"k": ["x", "y", "z"], "v": [1, 2, ""]})
+    b = pd.DataFrame({"k": ["x", "y", "z"], "v": [1, 3, ""]})
+    c = pd.DataFrame({"k": ["x", "y"], "v": [1, 4]})
+    out = ra.m4_side_by_side([old, b, c], ["k"], always=[("x",)])
+    assert out.to_dict("records") == [
+        {"k": "x", "v": "1 → 1 → 1", "changed": "no"},
+        {"k": "y", "v": "2 → 3 → 4", "changed": "yes"},
+        {"k": "z", "v": " → " + " → —", "changed": "yes"},
+    ]
+    assert ra._three(["", "", ""]) == ""
+

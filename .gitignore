@@ -26,3 +26,41 @@ docs/paper/**/*.blg
 docs/paper/**/*.fls
 docs/paper/**/*.fdb_latexmk
 docs/paper/**/*.synctex.gz
+
+# --- repository exposure audit 2026-10-04 (docs/REPO_EXPOSURE_AUDIT.md) ---
+# (a) secrets: env variants and key material; .env.example stays tracked (empty values)
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# local agent / editor state
+.claude/
+
+# (c) third-party papers (arXiv-id file names); government PDFs in docs/legal/ stay tracked
+docs/legal/[0-9][0-9][0-9][0-9].[0-9]*.pdf
+
+# (d) LLM-generated paper material and prompts
+docs/paper/reference_generated_draft.tex
+docs/paper/DRAFT_STATUS.md
+docs/paper/REVIEW_NOTES.md
+docs/paper/OUTLINE*.md
+**/*generated_draft*
+docs/archive/paper_ieee/
+docs/archive/paper_notes/
+docs/archive/prompts/
+docs/archive/REPO_CLEANUP_PLAN.md
+
+# (e) PDFs of our own drafts / build output; the figure PDF is needed by the paper build
+docs/paper/**/*.pdf
+!docs/paper/submission/figures/*.pdf
+docs/paper/submission/sections/*.tex
+docs/paper/**/*.toc
+
+# local audit report (contains identifying search terms)
+docs/REPO_EXPOSURE_AUDIT.md
+
+# keep: dataset read by scripts/validate_judge.py (force-added under data/*)
+!data/judge_validation_samples.json
