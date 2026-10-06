@@ -35,7 +35,7 @@ class AuditConfig:
     max_steps: int = 20
     stop_before_payment: bool = True
     rate_limit_delay_s: float = 2.0
-    user_agent: str = "Armavour-Auditor/1.0 (+https://github.com/Soumya-Vinod/Armavour)"
+    user_agent: str = "Armavour-Auditor/1.0 "
     evidence_dir: str = "results/audits"
 
 
