@@ -99,4 +99,3 @@ MIT — see `LICENSE`.
 
 ## Citation
 
-If you use Armavour, please cite the paper (to appear). A `CITATION.cff` will be added with the preprint.
