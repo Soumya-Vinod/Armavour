@@ -13,5 +13,5 @@ Our language finding points to a possible harm. Agents instructed in Hindi faile
 
 Our results should not be used to rank agent vendors or to argue that consumer protection can be relaxed for agent-mediated shopping. They come from two models on a synthetic testbed, and leaked information in our original benchmark made agents look more resistant than they were, not less.
 
-We discuss design choices in other dark-pattern benchmarks only to show where checks are worthwhile. We make no claim that their results are wrong.
-<!-- TODO(authors): if you notify the authors of the benchmarks discussed in Sections 2 and 6, say so here; do not state it unless it was actually sent. -->
+We discuss other benchmarks' design choices only to show where checks are worthwhile, not to suggest their results are wrong.
+<!-- TODO(authors): if you notify the authors of the benchmarks discussed in Section 2, say so here; do not state it unless it was actually sent. -->
