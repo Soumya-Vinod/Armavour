@@ -40,5 +40,3 @@ This paper makes six contributions:
 4. **An ablation of the configuration leak,** with trace evidence.
 5. **Corrected results:** what survives, what does not, and what holds only as a direction.
 6. **Released artefacts:** the testbed, audit scripts and executable path checks.
-
-Sections~\ref{sec:02_related_work}--\ref{sec:04_original_results} cover related work, the benchmark and its original results. Sections~\ref{sec:05_audit_method}--\ref{sec:07_corrected_results} cover the audit, its findings and the corrected evidence, and Section~\ref{sec:08_discussion} turns them into a checklist.

@@ -1,135 +1,157 @@
-% refs.bib -- candidate references for armavour_facct.tex.
-% Fields are exactly those supplied in the drafting brief; nothing else has been added.
-% Every entry must be checked before submission (see REVIEW_NOTES.md).
+% refs.bib -- references for docs/paper/submission/main.tex.
+% Checked 2026-10-08. Each entry says where its fields were confirmed:
+%   [web]  publisher/proceedings page, arXiv or ACL Anthology, via web search
+%   [pdf]  the PDF in docs/legal/
+% Remaining gaps are marked TODO.
 
-% VERIFY: authors/venue/year not checked
+% ---------------------------------------------------------------- validity
+% [web] American Psychologist 50(9)
+@article{messick1995validity,
+  author  = {Messick, Samuel},
+  title   = {Validity of Psychological Assessment: Validation of Inferences from Persons' Responses and Performances as Scientific Inquiry into Score Meaning},
+  journal = {American Psychologist},
+  volume  = {50},
+  number  = {9},
+  pages   = {741--749},
+  year    = {1995}
+}
+
+% [web] crossref / arXiv 1912.05511
 @inproceedings{jacobs2021measurement,
-  author    = {Jacobs, A. Z. and Wallach, H.},
+  author    = {Jacobs, Abigail Z. and Wallach, Hanna},
   title     = {Measurement and Fairness},
-  booktitle = {FAccT},
-  year      = {2021}
+  booktitle = {Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency (FAccT '21)},
+  year      = {2021},
+  publisher = {ACM},
+  doi       = {10.1145/3442188.3445901}
 }
 
-% VERIFY: authors/venue/year not checked
+% [web] NeurIPS 2021 Datasets and Benchmarks; arXiv 2111.15366
 @inproceedings{raji2021benchmark,
-  author    = {Raji and Bender and Paullada and Denton and Hanna},
+  author    = {Raji, Inioluwa Deborah and Bender, Emily M. and Paullada, Amandalynne and Denton, Emily and Hanna, Alex},
   title     = {{AI} and the Everything in the Whole Wide World Benchmark},
-  booktitle = {NeurIPS Datasets and Benchmarks},
+  booktitle = {Proceedings of the Neural Information Processing Systems Track on Datasets and Benchmarks},
   year      = {2021}
 }
 
-% VERIFY: authors/venue/year not checked
+% [web] ACL Anthology 2021.naacl-main.385
 @inproceedings{bowman2021fix,
-  author    = {Bowman, S. R. and Dahl, G. E.},
+  author    = {Bowman, Samuel R. and Dahl, George},
   title     = {What Will it Take to Fix Benchmarking in Natural Language Understanding?},
-  booktitle = {NAACL},
-  year      = {2021}
+  booktitle = {Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (NAACL-HLT)},
+  pages     = {4843--4855},
+  year      = {2021},
+  publisher = {Association for Computational Linguistics}
 }
 
-% VERIFY: authors/venue/year not checked
-@inproceedings{mathur2019darkpatterns,
-  author    = {Mathur and others},
-  title     = {Dark Patterns at Scale: Findings from a Crawl of 11K Shopping Websites},
-  booktitle = {CSCW},
-  year      = {2019}
-}
-
-% VERIFY: authors/venue/year not checked
-@inproceedings{gray2018dark,
-  author    = {Gray and others},
-  title     = {The Dark (Patterns) Side of {UX} Design},
-  booktitle = {CHI},
-  year      = {2018}
-}
-
-% VERIFY: authors/venue/year not checked
-@book{brignull2023deceptive,
-  author    = {Brignull, H.},
-  title     = {Deceptive Patterns},
-  year      = {2023}
-}
-
-% VERIFY: authors/venue/year not checked
-@inproceedings{zhou2024webarena,
-  author    = {Zhou and others},
-  title     = {{WebArena}: A Realistic Web Environment for Building Autonomous Agents},
-  booktitle = {ICLR},
+% [web] NeurIPS 2024 proceedings; arXiv 2411.12990
+@inproceedings{reuel2024betterbench,
+  author    = {Reuel, Anka and Hardy, Amelia and Smith, Chandler and Lamparth, Max and Hardy, Malcolm and Kochenderfer, Mykel J.},
+  title     = {{BetterBench}: Assessing {AI} Benchmarks, Uncovering Issues, and Establishing Best Practices},
+  booktitle = {Advances in Neural Information Processing Systems 37 (NeurIPS 2024), Datasets and Benchmarks Track},
   year      = {2024}
 }
 
-% VERIFY: authors/venue/year not checked
-@inproceedings{deng2023mind2web,
-  author    = {Deng and others},
-  title     = {{Mind2Web}: Towards a Generalist Agent for the Web},
-  booktitle = {NeurIPS},
-  year      = {2023}
-}
-
-% VERIFY: authors/venue/year not checked
-@inproceedings{xie2024osworld,
-  author    = {Xie and others},
-  title     = {{OSWorld}: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments},
-  booktitle = {NeurIPS},
-  year      = {2024}
-}
-
-% VERIFY: authors/venue/year not checked
+% [web] arXiv 2407.01502 (search results also list a TMLR 2025 version -- TODO: confirm and cite that if so)
 @misc{kapoor2024agents,
-  author       = {Kapoor and others},
+  author       = {Kapoor, Sayash and Stroebl, Benedikt and Siegel, Zachary S. and Nadgir, Nitya and Narayanan, Arvind},
   title        = {{AI} Agents That Matter},
-  howpublished = {arXiv},
+  howpublished = {arXiv:2407.01502},
   year         = {2024}
 }
 
-% VERIFY: authors/venue/year not checked
-@inproceedings{reuel2024betterbench,
-  author    = {Reuel and others},
-  title     = {{BetterBench}: Assessing {AI} Benchmarks, Uncovering Issues, and Establishing Best Practices},
-  booktitle = {NeurIPS Datasets and Benchmarks},
-  year      = {2024}
+% [web] NeurIPS 2025 proceedings; arXiv 2507.02825
+@inproceedings{zhu2025abc,
+  author    = {Zhu, Yuxuan and Jin, Tengjun and Pruksachatkun, Yada and Zhang, Andy and Liu, Shu and Cui, Sasha and Kapoor, Sayash and Longpre, Shayne and Meng, Kevin and Weiss, Rebecca and Barez, Fazl and Gupta, Rahul and Dhamala, Jwala and Merizian, Jacob and Giulianelli, Mario and Coppock, Harry and Ududec, Cozmin and Sekhon, Jasjeet and Steinhardt, Jacob and Kellermann, Antony and Schwettmann, Sarah and Zaharia, Matei and Stoica, Ion and Liang, Percy and Kang, Daniel},
+  title     = {Establishing Best Practices for Building Rigorous Agentic Benchmarks},
+  booktitle = {Advances in Neural Information Processing Systems 38 (NeurIPS 2025), Datasets and Benchmarks Track},
+  year      = {2025}
 }
 
-% VERIFY: authors/venue/year not checked
+% [web] Ecological Monographs 54(2)
 @article{hurlbert1984pseudo,
-  author  = {Hurlbert, S. H.},
+  author  = {Hurlbert, Stuart H.},
   title   = {Pseudoreplication and the Design of Ecological Field Experiments},
   journal = {Ecological Monographs},
+  volume  = {54},
+  number  = {2},
+  pages   = {187--211},
   year    = {1984}
 }
 
-% VERIFY: authors/venue/year not checked
-@misc{ccpa2023guidelines,
-  author = {{Central Consumer Protection Authority (India)}},
-  title  = {Guidelines for Prevention and Regulation of Dark Patterns, 2023},
-  year   = {2023}
+% ---------------------------------------------------------------- dark patterns
+% [web] CHI '21; arXiv 2101.04843
+@inproceedings{mathur2021dark,
+  author    = {Mathur, Arunesh and Mayer, Jonathan and Kshirsagar, Mihir},
+  title     = {What Makes a Dark Pattern... Dark? Design Attributes, Normative Considerations, and Measurement Methods},
+  booktitle = {Proceedings of the 2021 CHI Conference on Human Factors in Computing Systems (CHI '21)},
+  year      = {2021},
+  publisher = {ACM},
+  doi       = {10.1145/3411764.3445610}
 }
 
-% VERIFY: authors/venue/year not checked
-% TODO: add version and URL for the software citation.
-@misc{browseruse,
-  author = {{Browser Use}},
-  title  = {Browser Use (software library)}
+% [web] Journal of Legal Analysis 13(1)
+@article{luguri2021shining,
+  author  = {Luguri, Jamie and Strahilevitz, Lior Jacob},
+  title   = {Shining a Light on Dark Patterns},
+  journal = {Journal of Legal Analysis},
+  volume  = {13},
+  number  = {1},
+  pages   = {43--109},
+  year    = {2021},
+  doi     = {10.1093/jla/laaa006}
 }
 
-% Added 2026-10-08. Fields for the first three were read from the PDFs in docs/legal/; still check venue/pages.
-% VERIFY: venue details; title/authors taken from docs/legal/2510.18113v1.pdf
+% [web] CHI '18, paper 534
+@inproceedings{gray2018dark,
+  author    = {Gray, Colin M. and Kou, Yubo and Battles, Bryan and Hoggatt, Joseph and Toombs, Austin L.},
+  title     = {The Dark (Patterns) Side of {UX} Design},
+  booktitle = {Proceedings of the 2018 CHI Conference on Human Factors in Computing Systems (CHI '18)},
+  pages     = {534:1--534:14},
+  year      = {2018},
+  publisher = {ACM},
+  doi       = {10.1145/3173574.3174108}
+}
+
+% [web] PACMHCI 3(CSCW), article 81; arXiv 1907.07032
+@article{mathur2019darkpatterns,
+  author  = {Mathur, Arunesh and Acar, Gunes and Friedman, Michael J. and Lucherini, Elena and Mayer, Jonathan and Chetty, Marshini and Narayanan, Arvind},
+  title   = {Dark Patterns at Scale: Findings from a Crawl of 11K Shopping Websites},
+  journal = {Proceedings of the ACM on Human-Computer Interaction},
+  volume  = {3},
+  number  = {CSCW},
+  pages   = {81:1--81:32},
+  year    = {2019}
+}
+
+% [web] publisher Testimonium Ltd, 2023
+@book{brignull2023deceptive,
+  author    = {Brignull, Harry},
+  title     = {Deceptive Patterns: Exposing the Tricks Tech Companies Use to Control You},
+  publisher = {Testimonium Ltd},
+  year      = {2023}
+}
+
+% ---------------------------------------------------------------- agents and dark patterns
+% [pdf] docs/legal/2510.18113v1.pdf ("Accepted to IEEE Symposium on Security and Privacy 2026")
 @inproceedings{ersoy2026trickyarena,
   author    = {Ersoy, Devin and Lee, Brandon and Shreekumar, Ananth and Arunasalam, Arjun and Ibrahim, Muhammad and Bianchi, Antonio and Celik, Z. Berkay},
   title     = {Investigating the Impact of Dark Patterns on {LLM}-Based Web Agents},
-  booktitle = {IEEE Symposium on Security and Privacy (S\&P)},
+  booktitle = {Proceedings of the IEEE Symposium on Security and Privacy (S\&P)},
   year      = {2026}
 }
 
-% VERIFY: title/authors/DOI taken from docs/legal/2510.11035v2.pdf
+% [pdf] docs/legal/2510.11035v2.pdf (IUI '26 copyright block and DOI)
 @inproceedings{guo2026susbench,
   author    = {Guo, Longjie and Yuan, Chenjie and Zhong, Mingyuan and Wolfe, Robert and Zhong, Ruican and Xu, Yue and Wen, Bingbing and Shen, Hua and Wang, Lucy Lu and Hiniker, Alexis},
   title     = {{SusBench}: An Online Benchmark for Evaluating Dark Pattern Susceptibility of Computer-Use Agents},
   booktitle = {Proceedings of the 31st International Conference on Intelligent User Interfaces (IUI '26)},
   year      = {2026},
+  publisher = {ACM},
   doi       = {10.1145/3742413.3789111}
 }
 
-% VERIFY: venue (arXiv 2509.10723 at time of reading); authors from docs/legal/2509.10723v1.pdf
+% [pdf] docs/legal/2509.10723v1.pdf
 @misc{tang2025darkgui,
   author       = {Tang, Jingyu and Chen, Chaoran and Li, Jiawen and Zhang, Zhiping and Guo, Bingcan and Khalilov, Ibrahim and Gebreegziabher, Simret A. and Yao, Bingsheng and Wang, Dakuo and Ye, Yanfang and Li, Tianshi and Xiao, Ziang and Yao, Yaxing and Li, Toby Jia-Jun},
   title        = {Dark Patterns Meet {GUI} Agents: {LLM} Agent Susceptibility to Manipulative Interfaces and the Role of Human Oversight},
@@ -137,26 +159,82 @@
   year         = {2025}
 }
 
-% VERIFY: NOT read in this repo; authors/title/venue from memory, check everything
-@inproceedings{zhu2025abc,
-  author    = {Zhu, Yuxuan and others},
-  title     = {Establishing Best Practices for Building Rigorous Agentic Benchmarks},
-  booktitle = {NeurIPS Datasets and Benchmarks},
-  year      = {2025}
+% ---------------------------------------------------------------- web and computer-use agents
+% [web] ICLR 2024; arXiv 2307.13854
+@inproceedings{zhou2024webarena,
+  author    = {Zhou, Shuyan and Xu, Frank F. and Zhu, Hao and Zhou, Xuhui and Lo, Robert and Sridhar, Abishek and Cheng, Xianyi and Ou, Tianyue and Bisk, Yonatan and Fried, Daniel and Alon, Uri and Neubig, Graham},
+  title     = {{WebArena}: A Realistic Web Environment for Building Autonomous Agents},
+  booktitle = {The Twelfth International Conference on Learning Representations (ICLR)},
+  year      = {2024}
 }
 
-% VERIFY: NOT read in this repo; from memory
-@inproceedings{ahuja2023mega,
-  author    = {Ahuja, Kabir and others},
-  title     = {{MEGA}: Multilingual Evaluation of Generative {AI}},
-  booktitle = {EMNLP},
+% [web] NeurIPS 2023 Datasets and Benchmarks; arXiv 2306.06070
+@inproceedings{deng2023mind2web,
+  author    = {Deng, Xiang and Gu, Yu and Zheng, Boyuan and Chen, Shijie and Stevens, Sam and Wang, Boshi and Sun, Huan and Su, Yu},
+  title     = {{Mind2Web}: Towards a Generalist Agent for the Web},
+  booktitle = {Advances in Neural Information Processing Systems 36 (NeurIPS 2023), Datasets and Benchmarks Track},
   year      = {2023}
 }
 
-% VERIFY: NOT read in this repo; from memory
+% [web] NeurIPS 2024; arXiv 2404.07972
+@inproceedings{xie2024osworld,
+  author    = {Xie, Tianbao and Zhang, Danyang and Chen, Jixuan and Li, Xiaochuan and Zhao, Siheng and Cao, Ruisheng and Hua, Toh Jing and Cheng, Zhoujun and Shin, Dongchan and Lei, Fangyu and Liu, Yitao and Xu, Yiheng and Zhou, Shuyan and Savarese, Silvio and Xiong, Caiming and Zhong, Victor and Yu, Tao},
+  title     = {{OSWorld}: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments},
+  booktitle = {Advances in Neural Information Processing Systems 37 (NeurIPS 2024)},
+  year      = {2024}
+}
+
+% [web] official citation in the browser-use repository; the paper used version 0.13.4 (harness/requirements.txt)
+@misc{browseruse,
+  author       = {M{\"u}ller, Magnus and {\v{Z}}uni{\v{c}}, Gregor},
+  title        = {Browser Use: Enable {AI} to Control Your Browser},
+  howpublished = {\url{https://github.com/browser-use/browser-use}},
+  note         = {Version 0.13.4},
+  year         = {2024}
+}
+
+% ---------------------------------------------------------------- multilingual
+% [web] ACL Anthology 2023.emnlp-main.258
+@inproceedings{ahuja2023mega,
+  author    = {Ahuja, Kabir and Diddee, Harshita and Hada, Rishav and Ochieng, Millicent and Ramesh, Krithika and Jain, Prachi and Nambi, Akshay and Ganu, Tanuja and Segal, Sameer and Ahmed, Mohamed and Bali, Kalika and Sitaram, Sunayana},
+  title     = {{MEGA}: Multilingual Evaluation of Generative {AI}},
+  booktitle = {Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing (EMNLP)},
+  year      = {2023},
+  publisher = {Association for Computational Linguistics}
+}
+
+% [web] ACL Anthology 2020.acl-main.329
 @inproceedings{khanuja2020gluecos,
   author    = {Khanuja, Simran and Dandapat, Sandipan and Srinivasan, Anirudh and Sitaram, Sunayana and Choudhury, Monojit},
   title     = {{GLUECoS}: An Evaluation Benchmark for Code-Switched {NLP}},
-  booktitle = {ACL},
-  year      = {2020}
+  booktitle = {Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics (ACL)},
+  pages     = {3575--3585},
+  year      = {2020},
+  publisher = {Association for Computational Linguistics}
+}
+
+% ---------------------------------------------------------------- legal
+% [pdf] docs/legal/The Guidelines for Prevention and Regulation of Dark Patterns, 2023_1732707717.pdf
+@misc{ccpa2023guidelines,
+  author       = {{Central Consumer Protection Authority}},
+  title        = {Guidelines for Prevention and Regulation of Dark Patterns, 2023},
+  howpublished = {Notification F. No. CCPA-1/1/2023-CCPA(Reg), The Gazette of India: Extraordinary, Part III, Section 4, No. 783},
+  note         = {30 November 2023},
+  year         = {2023}
+}
+
+% [pdf] cited as "(35 of 2019)" in the Gazette notification above
+@misc{cpa2019,
+  author       = {{Government of India}},
+  title        = {The Consumer Protection Act, 2019 (No. 35 of 2019)},
+  year         = {2019}
+}
+
+% [pdf] docs/legal/Press Release Page _ Press Information Bureau_PW.pdf (release ID 2268302)
+@misc{pib2026ccpa,
+  author       = {{Press Information Bureau, Ministry of Consumer Affairs, Food \& Public Distribution}},
+  title        = {{CCPA} Acts Against Dark Patterns on Digital Platforms: {PhysicsWallah} Fined {Rs} 5 Lakh and {McAfee} {Rs} 1 Lakh},
+  howpublished = {\url{https://www.pib.gov.in/PressReleasePage.aspx?PRID=2268302}},
+  note         = {Press release, 3 June 2026},
+  year         = {2026}
 }

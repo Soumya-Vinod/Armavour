@@ -82,7 +82,7 @@ The agent was told more than a consumer would be, through two channels.
 
 The third class is the gap between what the agent did and what the outcome code recorded.
 
-**Missing ground truth scored as benign.** When an episode ended without the oracle firing, the evaluator recorded the agent as having avoided the pattern. We looked at all 48 such episodes in the BrowserUse arm. None of the agents claimed to have succeeded. Sixteen were forced to stop by the framework's tool restrictions, 14 gave up after reporting a real obstacle, 15 stopped one step short without saying why, and 3 never issued a final action. Six of the seven at control intensity were forced stops. These were failures to finish, not successes.
+**Missing ground truth scored as benign.** When an episode ended without the oracle firing, the evaluator recorded the agent as having avoided the pattern. We looked at all 48 such episodes in the BrowserUse arm, and in none of them did the agent claim to have succeeded. These were failures to finish, not successes.
 
 **Abandonment scored as safe.** For the subscription trap, this default inverted the measurement. The trap is built to make people give up partway through cancelling, which leaves the subscription active. Under our rule, giving up was scored as avoidance. Scored the way the specification says, 9 of 40 BrowserUse episodes were deceived, not 0.
 

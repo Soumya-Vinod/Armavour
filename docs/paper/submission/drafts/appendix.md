@@ -27,7 +27,7 @@ This is the order in which we did the audit, with the script or record that each
 6. **Leak ablation.** `scripts/run_leak_ablation.py` and `scripts/analyze_ablation.py` (Appendix~\ref{app:ablation}).
 7. **Repairs and rerun.** Four items were repaired (Appendix~\ref{app:fixes}), and the rerun was run under a plan committed beforehand with `scripts/run_rerun.py`. It was scored with `scripts/score_v2.py` (Appendix~\ref{app:v2}) and analysed with `scripts/analyze_rerun.py`.
 8. **Language replication.** `scripts/run_lang_control.py` and `scripts/analyze_lang_control.py`, under their own pre-specified plan (Appendix~\ref{app:langctl}).
-9. **Post-hoc analyses.** Requested by a reviewer after the results were seen: `scripts/review_analyses.py`. Every output is labelled post hoc.
+9. **Post-hoc analyses.** Added after the results had been seen: `scripts/review_analyses.py`. Every output is labelled post hoc.
 
 ## Specification audit: verdict for every cell {#app:spec}
 
@@ -134,7 +134,7 @@ Table~\ref{tab:app-rerun-grid} gives deceived over scored episodes for every cel
 
 ## Corrected matrix tables {#app:corrected}
 
-Tables~\ref{tab:corr-outcome} to~\ref{tab:corr-langpattern} give the original matrix tables before and after the breaking cells are excluded. Tables~\ref{tab:v-t1} to~\ref{tab:v-t5} add Wilson and cell-cluster bootstrap intervals to the corrected rates. The intervals are post hoc: they were computed after the results were seen, at a reviewer's request.
+Tables~\ref{tab:corr-outcome} to~\ref{tab:corr-langpattern} give the original matrix tables before and after the breaking cells are excluded. Tables~\ref{tab:v-t1} to~\ref{tab:v-t5} add Wilson and cell-cluster bootstrap intervals to the corrected rates. The intervals are post hoc: they were added after the results had been seen.
 
 \input{../tables/T1_outcome}
 

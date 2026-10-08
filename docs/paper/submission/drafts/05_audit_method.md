@@ -29,6 +29,4 @@ We audited the benchmark the way we would want someone else to audit it. The que
 
 **Controlled rerun.** Finally, we repaired four items and ran the original and repaired testbeds side by side on the same model, under an analysis plan written and committed before the run (Section~\ref{sec:07_corrected_results}).
 
-Some further analyses were added later at a reviewer's request, after the results had been seen. We mark these as post hoc wherever they appear.
-
 All database queries were read-only and every finding is tied to a script that can be re-run, which matters because we audited our own work (Section~\ref{sec:09_limitations}).
