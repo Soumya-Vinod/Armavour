@@ -104,10 +104,10 @@ Some failures entered only after the data was clean.
 
 The last class concerns whether we knew what had actually been run.
 
-**The judge.** Our run manifest recorded the judge as a small Llama model. But 107 of 235 confirm-shaming judge outputs contain two unusual typographic characters, a non-breaking hyphen and a narrow no-break space. These appear in none of the 2,202 Llama agent traces, in none of the judge's inputs, and in 29 of 181 traces from a gpt-oss model. The judge was almost certainly from the gpt-oss family. We do not know which size.
+**The judge.** Our run manifest recorded the judge as a small Llama model. But 107 of 235 confirm-shaming judge outputs contain two unusual typographic characters, a non-breaking hyphen and a narrow no-break space. These appear in none of the 2,141 Llama-3.3-70B or 61 Llama-3.1-8B agent traces, in none of the judge's inputs, and in 29 of 181 traces from a gpt-oss model. The judge was almost certainly from the gpt-oss family. We do not know which size.
 
 **Code drift.** One block of 172 BrowserUse rows, with 7,602 seconds of recorded run time, was written in 20 seconds, and two arms were first inserted before the code that produced them had been committed.
 
 **Served is not committed.** Our pilot notes reported a striking reversal: drip pricing deceived agents at moderate intensity but not at aggressive. The five pilot episodes behind that claim describe a page showing "Pay Rs 590" with a decline button, which the committed code at aggressive intensity cannot render. They were served an older version of the page. The matrix ran the committed version and was deceived 10 times out of 10. The "reversal" was a comparison between two different pages.
 
-**Retirement.** The provider has since withdrawn Llama-3.3-70B. Our attempt to rerun with it produced 52 `model_not_found` errors, so the original matrix cannot be reproduced on its own model.
+**Retirement.** The provider has since withdrawn Llama-3.3-70B. Our attempt to rerun with it failed 52 times with a model-not-found error, so the original matrix cannot be reproduced on its own model.
