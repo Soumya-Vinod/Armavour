@@ -32,6 +32,6 @@ The language results raise a different concern. On pages with no manipulation at
 
 ## Why publish a failed benchmark?
 
-We considered presenting only the corrected benchmark. We decided against it for two reasons. First, the original numbers looked publishable, and we came close to publishing them. The specific ways they went wrong are more useful to other builders than a clean result would have been. Second, the failure classes are not specific to us. Section~\ref{sec:06_taxonomy} notes that other agent benchmarks share some of the design choices that leaked information in ours, and capability benchmarks show similar setup and scoring flaws. We are not claiming that those benchmarks are wrong. We are saying these are the places to check.
+We considered presenting only the corrected benchmark. We decided against it for two reasons. First, the original numbers looked publishable. The specific ways they went wrong are more useful to other builders than a clean result would have been. Second, the failure classes are not specific to us. Section~\ref{sec:06_taxonomy} notes that other agent benchmarks share some of the design choices that leaked information in ours, and capability benchmarks show similar setup and scoring flaws. We are not claiming that those benchmarks are wrong. We are saying these are the places to check.
 
 A self-audit has obvious limits (Section~\ref{sec:09_limitations}). It is still worth doing, and doing early. Ours took days, not months. Most of the time went into questions that the checklist above answers in minutes.
