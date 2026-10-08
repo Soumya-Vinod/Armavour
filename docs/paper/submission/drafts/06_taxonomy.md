@@ -37,9 +37,7 @@
 Reviewer challenge: "bug list, not taxonomy" → emphasise signatures + generality (ABC, TrickyArena design overlap).
 -->
 
-None of the problems in this section announced themselves. The matrix ran to completion, the oracle fired when it should, the aggregates were stable across seeds, and the headline numbers told a story that fit the literature. Every failure we found was a failure in what a number meant, not in whether it was computed. That is what makes them worth classifying. A list of bugs is only useful to us. A list of failure *classes*, each with a check that would have caught it, is useful to anyone building a benchmark of this kind.
-
-We group the failures by where in the pipeline they enter: the item itself, the information the agent receives, the scoring rule, the analysis, and the record of what was actually run. Table~\ref{tab:taxonomy} summarises the five classes. For each one we describe what went wrong in Armavour. The table also gives a *signature* for each class: something you can look for in your own data or code without knowing in advance that anything is broken.
+We group the failures by where in the pipeline they enter: the item itself, the information the agent receives, the scoring rule, the analysis, and the record of what was actually run. Table~\ref{tab:taxonomy} summarises the five classes, each with a *signature*: something you can look for in your own data or code without knowing in advance that anything is broken.
 
 \begin{table}[t]
 \caption{Five classes of measurement-validity failure found in the audit, with a detection signature for each.}
@@ -62,7 +60,7 @@ Provenance & Judge model misrecorded; code changed mid-run; served page differed
 
 The most damaging failures were in the items themselves, and they came in four forms.
 
-**No faithful path.** At aggressive intensity, two patterns could only be completed by being deceived. In drip pricing, the hidden fee was added inside the same click that fired the oracle. The page showed "Pay Rs 500" right up to that click, and the decline button only appears once the total rises above Rs 500, so it never appeared. An agent that did everything right was still scored as deceived. SaaS billing at aggressive intensity had the same problem from the other direction. The task asked for the free plan, but the page offered only a Pro trial with automatic renewal switched on and no checkbox to turn it off, so starting the trial was the only way to finish. All 15 ComputerUse episodes run with Llama models in this cell were scored as deceived. Qwen declined to start the trial in all 10 episodes in each ablation arm, which under our scoring counted as avoidance. The same cell gave opposite answers depending on whether the model was willing to give up.
+**No faithful path.** At aggressive intensity, two patterns could only be completed by being deceived. In drip pricing, the hidden fee was added inside the same click that fired the oracle. The page showed "Pay Rs 500" right up to that click, and the decline button only appears once the total rises above Rs 500, so it never appeared. An agent that did everything right was still scored as deceived. SaaS billing at aggressive intensity had the same problem from the other direction. The task asked for the free plan, but the page offered only a Pro trial with automatic renewal switched on and no checkbox to turn it off, so starting the trial was the only way to finish. All 15 ComputerUse episodes run with Llama models in this cell were scored as deceived, while Qwen, which simply declined to start the trial, was scored as avoiding it.
 
 **Inverted scoring.** The trick question was meant to test whether an agent could read a confusing double negative. At moderate and aggressive intensity, in all three languages, the oracle's mapping contradicted the label on the page. An agent that read the label correctly was scored as deceived, and one that misread it was scored as having avoided the trap. In the ComputerUse episodes, the outcome was fully determined by the final state of the checkbox, with no exceptions. Episode 1214 shows how stark this was. The agent reasoned, "Since the box is already checked to NOT avoid receiving marketing communications, and we actually [don't want them]", unticked the box, which was the correct reading, and was scored as deceived. A native speaker checked the Hinglish wording, where an extra negation had looked as if it might make the scoring consistent. It does not: Hinglish is inverted too.
 
@@ -72,7 +70,7 @@ The most damaging failures were in the items themselves, and they came in four f
 
 Two harness faults also stood between item and agent: the context text passed with each button ran into the neighbouring button's label (Section~\ref{sec:language}), and the harness ticked the trick-question box even when the agent asked to leave it unticked (Section~\ref{sec:07_corrected_results}).
 
-## Information leakage
+## Information leakage {#sec:leakage}
 
 The agent was told more than a consumer would be, through two channels.
 

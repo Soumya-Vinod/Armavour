@@ -21,7 +21,7 @@ We audited the benchmark the way we would want someone else to audit it. The que
 
 **Provenance forensics.** Because timestamps could not date a row's content, we dated rows by content signatures and git ancestry, and identified the judge from a typographic fingerprint in its outputs (Section~\ref{sec:06_taxonomy}).
 
-**Controlled ablation.** Some problems could be shown to exist but not to matter. Every episode had the run configuration in its prompt, so the matrix contains no unexposed condition to compare against. Where exposure was universal, we ran a seed-paired ablation on a second model: the same 200 configurations with and without the leaked information, compared pair by pair.
+**Controlled ablation.** Where exposure was universal, we ran a seed-paired ablation (Section~\ref{sec:leakage}).
 
 **Reconstruction.** We corrected the published results with the original analysis code, after first checking that it reproduced every published table exactly (Appendix~\ref{app:protocol}).
 
